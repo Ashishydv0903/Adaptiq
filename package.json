@@ -1,0 +1,30 @@
+{
+  "name": "adaptiq-monorepo",
+  "version": "1.0.0",
+  "description": "AdaptIQ - AI-Powered Adaptive Interview & Skill Assessment Platform with Skill Gap Analysis and Explainable Feedback",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "server:dev": "npm --prefix server run dev",
+    "server:start": "npm --prefix server start",
+    "server:test": "npm --prefix server test",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "client:test": "npm --prefix client test",
+    "test": "npm --prefix server test",
+    "seed": "npm --prefix server run seed"
+  },
+  "keywords": [
+    "adaptive-testing",
+    "irt",
+    "interview-platform",
+    "gemini-ai",
+    "xai",
+    "skill-gap-analysis"
+  ],
+  "author": "AdaptIQ Team",
+  "license": "MIT"
+}

@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # ==============================================================================
+  # MongoDB Database
+  # ==============================================================================
+  mongo:
+    image: mongo:7.0
+    container_name: adaptiq-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: adaptiq
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - adaptiq-network
+
+  # ==============================================================================
+  # Backend Server (Node.js 20 Express)
+  # ==============================================================================
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: adaptiq-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - MONGO_URI=mongodb://mongo:27017/adaptiq
+      - CLIENT_URL=http://localhost:5173
+      - JWT_SECRET=super_secure_jwt_secret_key_adaptiq_2026_dev_min_32_chars
+      - JWT_REFRESH_SECRET=super_secure_refresh_secret_key_adaptiq_2026_dev_min_32_chars
+      - LLM_PROVIDER=gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - JUDGE0_API_URL=http://judge0-server:2358
+    depends_on:
+      - mongo
+    volumes:
+      - ../server:/app
+      - /app/node_modules
+    networks:
+      - adaptiq-network
+
+  # ==============================================================================
+  # Frontend Client (React 18 + Vite)
+  # ==============================================================================
+  client:
+    build:
+      context: ../client
+      dockerfile: Dockerfile
+    container_name: adaptiq-client
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:5000/api
+      - VITE_SOCKET_URL=http://localhost:5000
+    depends_on:
+      - server
+    volumes:
+      - ../client:/app
+      - /app/node_modules
+    networks:
+      - adaptiq-network
+
+  # ==============================================================================
+  # Judge0 Code Execution Engine
+  # ==============================================================================
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    container_name: adaptiq-judge0-server
+    restart: always
+    ports:
+      - "2358:2358"
+    environment:
+      - REDIS_HOST=judge0-redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=judge0-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_password
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    networks:
+      - adaptiq-network
+
+  judge0-db:
+    image: postgres:15-alpine
+    container_name: adaptiq-judge0-db
+    restart: always
+    environment:
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0_password
+    volumes:
+      - judge0_db_data:/var/lib/postgresql/data
+    networks:
+      - adaptiq-network
+
+  judge0-redis:
+    image: redis:7-alpine
+    container_name: adaptiq-judge0-redis
+    restart: always
+    volumes:
+      - judge0_redis_data:/data
+    networks:
+      - adaptiq-network
+
+volumes:
+  mongo_data:
+  judge0_db_data:
+  judge0_redis_data:
+
+networks:
+  adaptiq-network:
+    driver: bridge
