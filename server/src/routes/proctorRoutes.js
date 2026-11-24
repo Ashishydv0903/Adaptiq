@@ -16,7 +16,8 @@ import {
   postSessionReviewAction,
   getFalsePositiveTuningReport
 } from '../controllers/proctorController.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, authorize } from '../middleware/auth.js';
+import { sessionParamOwnership, requireSessionOwnership, requireEvidenceOwnership } from '../middleware/ownership.js';
 
 const router = express.Router();
 
@@ -30,6 +31,9 @@ const upload = multer({
 
 // Require authentication for all proctoring routes
 router.use(authenticate);
+
+// Enforce session ownership on any route containing :sessionId
+router.param('sessionId', sessionParamOwnership);
 
 // Consent endpoints
 router.post('/consent', saveProctorConsent);
@@ -47,17 +51,17 @@ router.post('/check-text', checkTextAIRisk);
 
 // Evidence handling (GridFS/Cloud storage)
 router.post('/evidence', upload.single('videoBuffer'), uploadEvidence);
-router.get('/evidence/:id', streamEvidence);
-router.post('/evidence/cleanup', triggerEvidenceRetentionCleanup);
+router.get('/evidence/:id', requireEvidenceOwnership, streamEvidence);
+router.post('/evidence/cleanup', authorize('recruiter', 'admin'), triggerEvidenceRetentionCleanup);
 
 // Recruiter live-monitor active session grid & actions
-router.get('/active-sessions', getActiveProctorSessions);
-router.post('/session/:sessionId/action', executeRecruiterSessionAction);
-router.get('/audit-logs/:sessionId', getSessionAuditTrail);
+router.get('/active-sessions', authorize('recruiter', 'admin'), getActiveProctorSessions);
+router.post('/session/:sessionId/action', authorize('recruiter', 'admin'), executeRecruiterSessionAction);
+router.get('/audit-logs/:sessionId', requireSessionOwnership('sessionId'), getSessionAuditTrail);
 
 // Post-Session Timeline Review & Human-in-the-Loop Actions
 router.get('/session/:sessionId/review', getSessionReviewTimeline);
-router.post('/session/:sessionId/review-action', postSessionReviewAction);
+router.post('/session/:sessionId/review-action', authorize('recruiter', 'admin'), postSessionReviewAction);
 
 // Threshold Tuning Report
 router.get('/tuning-metrics', getFalsePositiveTuningReport);

@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/seed/index.js",
+    "seed:demo": "node src/seed/demoData.js",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
     "report:false-positives": "node src/scripts/reportFalsePositiveRates.js",
     "test:ml": "cross-env NODE_OPTIONS=--experimental-vm-modules jest src/tests/ml --runInBand",
@@ -41,6 +42,8 @@
   "devDependencies": {
     "cross-env": "^7.0.3",
     "jest": "^29.7.0",
+    "mongodb-memory-server": "^11.4.0",
+    "nock": "^15.0.6",
     "nodemon": "^3.1.4",
     "supertest": "^7.0.0"
   },

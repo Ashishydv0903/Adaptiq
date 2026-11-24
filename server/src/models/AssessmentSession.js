@@ -27,6 +27,18 @@ const assessmentSessionSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    isDemo: {
+      type: Boolean,
+      default: false
+    },
+    executionUnavailable: {
+      type: Boolean,
+      default: false
+    },
+    hasHeuristicEvaluations: {
+      type: Boolean,
+      default: false
+    },
     recruiterNotes: [
       {
         note: { type: String, required: true },
@@ -134,6 +146,7 @@ const assessmentSessionSchema = new mongoose.Schema(
         roundType: { type: String, required: true },
         answer: { type: String, default: '' },
         score: { type: Number, default: 0 },
+        evaluatedBy: { type: String, enum: ['llm', 'heuristic'], default: 'llm' },
         thetaAfter: { type: Number, default: 0 },
         semAfter: { type: Number, default: 1 },
         answeredAt: { type: Date, default: Date.now },

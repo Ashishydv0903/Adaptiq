@@ -12,13 +12,24 @@ describe('AI Proctoring Severity and Escalation Logic', () => {
     expect(lookingAway.isEscalated).toBe(false);
 
     const multipleFaces = evaluateSeverityAndEscalation([], { type: 'MULTIPLE_FACES' });
-    expect(multipleFaces.finalSeverity).toBe('orange');
+    expect(multipleFaces.finalSeverity).toBe('red');
 
     const prohibitedObject = evaluateSeverityAndEscalation([], { type: 'PROHIBITED_OBJECT' });
-    expect(prohibitedObject.finalSeverity).toBe('orange');
+    expect(prohibitedObject.finalSeverity).toBe('red');
 
     const identityMismatch = evaluateSeverityAndEscalation([], { type: 'IDENTITY_MISMATCH' });
     expect(identityMismatch.finalSeverity).toBe('red');
+  });
+
+  test('escalates NO_FACE from yellow to orange to red based on duration thresholds', () => {
+    const shortNoFace = evaluateSeverityAndEscalation([], { type: 'NO_FACE', durationMs: 1500 });
+    expect(shortNoFace.finalSeverity).toBe('yellow');
+
+    const mediumNoFace = evaluateSeverityAndEscalation([], { type: 'NO_FACE', durationMs: 3500 });
+    expect(mediumNoFace.finalSeverity).toBe('orange');
+
+    const longNoFace = evaluateSeverityAndEscalation([], { type: 'NO_FACE', durationMs: 6500 });
+    expect(longNoFace.finalSeverity).toBe('red');
   });
 
   test('assigns base severities for browser, typing, audio, and AI-risk events', () => {

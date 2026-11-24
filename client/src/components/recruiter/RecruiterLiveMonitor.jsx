@@ -36,8 +36,9 @@ import {
   Check,
   Sliders
 } from 'lucide-react';
+import ProctorDemoControls from '../interview/ProctorDemoControls';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5000';
 
 /**
  * Synthesizes an emergency chime sound using Web Audio API for Red Alerts
@@ -134,8 +135,10 @@ export const RecruiterLiveMonitor = () => {
 
   // Initialize Socket.io connection for recruiter monitor
   useEffect(() => {
+    const token = localStorage.getItem('adaptiq_access_token') || localStorage.getItem('token');
     const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      auth: { token }
     });
     socketRef.current = socket;
 
@@ -361,6 +364,39 @@ export const RecruiterLiveMonitor = () => {
       console.warn('Failed to load audit logs:', err);
       setAuditDrawer((prev) => ({ ...prev, loading: false }));
     }
+  };
+
+  const handleInjectDemoAlert = (eventType) => {
+    const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+    const targetSession = selectedSession || sessions[0] || { id: 'demo_session_1', candidateName: 'Alan Turing' };
+    const alert = {
+      sessionId: targetSession.id,
+      candidateName: targetSession.candidateName || 'Alan Turing',
+      severity: 'red',
+      integrityStatus: 'RED',
+      type: eventType === 'phone' ? 'cell_phone_detected' : eventType === 'second_face' ? 'multiple_faces' : 'identity_mismatch',
+      message: eventType === 'phone' ? 'Prohibited object (cell phone) detected in viewport.' : eventType === 'second_face' ? 'Multiple faces detected in camera viewport.' : 'Face descriptor mismatch with verified enrolled template.',
+      timestamp: new Date().toISOString(),
+      integrityScore: 45
+    };
+    setLiveAlerts((prev) => [alert, ...prev.slice(0, 49)]);
+    if (soundEnabled) {
+      playRedAlertChime();
+    }
+    setCriticalRedBanner(alert);
+    setSessions((prev) =>
+      prev.map((s) => {
+        if (s.id === alert.sessionId) {
+          return {
+            ...s,
+            integrityScore: 45,
+            integrityStatus: 'RED',
+            alerts: { ...s.alerts, total: (s.alerts?.total || 0) + 1, red: (s.alerts?.red || 0) + 1 }
+          };
+        }
+        return s;
+      })
+    );
   };
 
   // Filter sessions
@@ -827,7 +863,16 @@ export const RecruiterLiveMonitor = () => {
                   <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400">
                     {alert.sessionId?.substring(0, 8)}...
                   </td>
-                  <td className="py-2.5 px-3 font-semibold text-white">{alert.type}</td>
+                  <td className="py-2.5 px-3 font-semibold text-white">
+                    <div className="flex items-center gap-1.5">
+                      <span>{alert.type}</span>
+                      {(alert.source === 'demo' || alert.metadata?.source === 'demo') && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase bg-purple-900/60 text-purple-300 border border-purple-500/50">
+                          SIMULATED
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-2.5 px-3 max-w-xs truncate text-slate-300">{alert.message}</td>
                   <td className="py-2.5 px-3">
                     {alert.snapshot ? (
@@ -1030,6 +1075,9 @@ export const RecruiterLiveMonitor = () => {
           </div>
         </div>
       )}
+
+      {/* Floating Viva / Demo Proctor Event Injector */}
+      <ProctorDemoControls onInjectEvent={handleInjectDemoAlert} />
     </div>
   );
 };

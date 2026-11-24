@@ -5,6 +5,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
+import nock from 'nock';
 import { createApp } from '../../app.js';
 import { User, Question, AssessmentSession } from '../../models/index.js';
 import { env } from '../../config/env.js';
@@ -48,12 +49,25 @@ describe('Coding Round & Voice Mode APIs', () => {
   });
 
   afterEach(() => {
+    nock.cleanAll();
     jest.restoreAllMocks();
   });
 
   describe('POST /api/sessions/:id/execute-code', () => {
     test('Executes test cases and returns runtime and memory stats', async () => {
       jest.spyOn(Question, 'findById').mockResolvedValue(mockCodingQuestion);
+
+      const JUDGE0_BASE_URL = env.JUDGE0_API_URL || 'http://localhost:2358';
+      nock(JUDGE0_BASE_URL)
+        .persist()
+        .post('/submissions?base64_encoded=false&wait=true')
+        .reply(200, {
+          status: { id: 3, description: 'Accepted' },
+          stdout: '[0,1]\n',
+          time: '0.045',
+          memory: 12480,
+          compile_output: null
+        });
 
       const res = await request(app)
         .post('/api/sessions/session_test/execute-code')

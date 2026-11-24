@@ -57,8 +57,50 @@ describe('Auth & Role Authorization API', () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.user.email).toBe('john.new@adaptiq.ai');
+      expect(res.body.data.user.role).toBe('candidate');
       expect(res.body.data.accessToken).toBeDefined();
       expect(res.body.data.refreshToken).toBeDefined();
+    });
+
+    test('Registering with role "admin" ignores role and always yields a candidate', async () => {
+      const mockUser = {
+        _id: '64b0f0000000000000000009',
+        name: 'Privilege Escalation Attempt',
+        email: 'attacker@adaptiq.ai',
+        role: 'candidate',
+        refreshTokens: [],
+        save: jest.fn().mockResolvedValue(true),
+        generateAccessToken: () =>
+          jwt.sign(
+            { id: '64b0f0000000000000000009', email: 'attacker@adaptiq.ai', role: 'candidate', name: 'Privilege Escalation Attempt' },
+            env.JWT_SECRET,
+            { expiresIn: '1h' }
+          ),
+        generateRefreshToken: () =>
+          jwt.sign({ id: '64b0f0000000000000000009', type: 'refresh' }, env.JWT_REFRESH_SECRET, { expiresIn: '7d' })
+      };
+
+      jest.spyOn(User, 'findOne').mockResolvedValueOnce(null);
+      const createSpy = jest.spyOn(User, 'create').mockResolvedValueOnce(mockUser);
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          name: 'Privilege Escalation Attempt',
+          email: 'attacker@adaptiq.ai',
+          password: 'Password123!',
+          role: 'admin'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      // User must be created as candidate regardless of requested role
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'candidate'
+        })
+      );
+      expect(res.body.data.user.role).toBe('candidate');
     });
   });
 
@@ -143,7 +185,7 @@ describe('Auth & Role Authorization API', () => {
 
   describe('Role-based Middleware Authorization', () => {
     test('Denies access (401) to protected route when no token is provided', async () => {
-      const res = await request(app).get('/api/users/candidate-area');
+      const res = await request(app).get('/api/users/recruiter/candidates');
       expect(res.status).toBe(401);
       expect(res.body.success).toBe(false);
     });
@@ -163,7 +205,30 @@ describe('Auth & Role Authorization API', () => {
       });
 
       const res = await request(app)
-        .get('/api/users/recruiter-area')
+        .get('/api/users/recruiter/candidates')
+        .set('Authorization', `Bearer ${candidateToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/Forbidden/);
+    });
+
+    test('Denies access (403) when candidate attempts to access admin endpoint', async () => {
+      const candidateToken = jwt.sign(
+        { id: '64b0f0000000000000000001', role: 'candidate' },
+        env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      jest.spyOn(User, 'findById').mockReturnValueOnce({
+        select: jest.fn().mockResolvedValueOnce({
+          _id: '64b0f0000000000000000001',
+          role: 'candidate'
+        })
+      });
+
+      const res = await request(app)
+        .get('/api/users/admin/approval-queue')
         .set('Authorization', `Bearer ${candidateToken}`);
 
       expect(res.status).toBe(403);
@@ -186,12 +251,50 @@ describe('Auth & Role Authorization API', () => {
       });
 
       const res = await request(app)
-        .get('/api/users/recruiter-area')
+        .get('/api/users/recruiter/candidates')
         .set('Authorization', `Bearer ${recruiterToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.message).toMatch(/Welcome to the Recruiter Portal/);
+      expect(res.body.data.candidates).toBeDefined();
+    });
+
+    test('Grants access (201) when admin creates recruiter via admin endpoint', async () => {
+      const adminToken = jwt.sign(
+        { id: '64b0f0000000000000000003', role: 'admin' },
+        env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      jest.spyOn(User, 'findById').mockReturnValueOnce({
+        select: jest.fn().mockResolvedValueOnce({
+          _id: '64b0f0000000000000000003',
+          role: 'admin'
+        })
+      });
+
+      jest.spyOn(User, 'findOne').mockResolvedValueOnce(null);
+      jest.spyOn(User, 'create').mockResolvedValueOnce({
+        _id: '64b0f0000000000000000004',
+        name: 'New Recruiter',
+        email: 'recruiter.new@adaptiq.ai',
+        role: 'recruiter',
+        demographicGroup: 'unspecified'
+      });
+
+      const res = await request(app)
+        .post('/api/users/admin/create-user')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'New Recruiter',
+          email: 'recruiter.new@adaptiq.ai',
+          password: 'RecruiterPassword123!',
+          role: 'recruiter'
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.user.role).toBe('recruiter');
     });
   });
 });

@@ -15,7 +15,8 @@ import {
   Code2,
   ChevronRight,
   Terminal,
-  FileCode
+  FileCode,
+  RefreshCw
 } from 'lucide-react';
 
 const LANGUAGE_CONFIGS = [
@@ -69,6 +70,7 @@ export const MonacoCodeEditor = ({
   const [runningTests, setRunningTests] = useState(false);
   const [testResults, setTestResults] = useState(null);
   const [error, setError] = useState('');
+  const [isExecutionUnavailable, setIsExecutionUnavailable] = useState(false);
 
   // Hint ladder state
   const [hintLadder, setHintLadder] = useState(question?.hints || []);
@@ -110,6 +112,7 @@ export const MonacoCodeEditor = ({
       return;
     }
     setError('');
+    setIsExecutionUnavailable(false);
     setRunningTests(true);
     setActiveTab('tests');
 
@@ -117,12 +120,26 @@ export const MonacoCodeEditor = ({
       const res = await api.post(`/sessions/${sessionId}/execute-code`, {
         language,
         code,
+        questionId: question?._id || question?.id,
         isSubmission: false
       });
 
-      setTestResults(res.data.data.execution);
+      const execData = res.data?.data?.execution || res.data?.data;
+      setTestResults(execData);
+      setIsExecutionUnavailable(false);
     } catch (err) {
-      setError(err.response?.data?.message || 'Execution failed. Check your syntax or timeout constraints.');
+      const isUnavailable =
+        err.response?.status === 503 ||
+        err.response?.data?.code === 'EXECUTION_UNAVAILABLE' ||
+        (err.response?.data?.message || '').includes('unavailable');
+
+      if (isUnavailable) {
+        setIsExecutionUnavailable(true);
+        setError('Code execution is unavailable right now. Retry, or continue without running.');
+      } else {
+        setIsExecutionUnavailable(false);
+        setError(err.response?.data?.message || 'Execution failed. Check your syntax or timeout constraints.');
+      }
     } finally {
       setRunningTests(false);
     }
@@ -172,12 +189,12 @@ export const MonacoCodeEditor = ({
   };
 
   // Submit Final Code Solution
-  const handleSubmitCode = async () => {
+  const handleSubmitCode = async (options = {}) => {
     if (!code || !code.trim()) {
       setError('Please provide code before submitting.');
       return;
     }
-    onSubmitSolution(code, language, testResults, codeReview);
+    onSubmitSolution(code, language, testResults, codeReview, options);
   };
 
   return (
@@ -268,9 +285,38 @@ export const MonacoCodeEditor = ({
       </div>
 
       {error && (
-        <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          <span>{error}</span>
+        <div
+          data-testid="execution-error-banner"
+          className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-2xl text-rose-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+            <span>{error}</span>
+          </div>
+          {isExecutionUnavailable && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleRunSampleTests}
+                disabled={runningTests}
+                className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg transition shadow flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${runningTests ? 'animate-spin' : ''}`} />
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onSubmitSolution) {
+                    onSubmitSolution(code, language, null, null, { continueWithoutRunning: true });
+                  }
+                }}
+                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg border border-slate-700 transition cursor-pointer"
+              >
+                Continue without running
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -344,7 +390,7 @@ export const MonacoCodeEditor = ({
               <div className="space-y-3">
                 {/* Metrics header */}
                 <div className="flex flex-wrap items-center justify-between p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs">
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-4">
                     <span className="text-slate-400">
                       Status:{' '}
                       <strong className={testResults.allPassed ? 'text-emerald-400' : 'text-rose-400'}>
@@ -359,6 +405,16 @@ export const MonacoCodeEditor = ({
                       <Cpu className="w-3 h-3 text-indigo-400" />
                       Memory: <strong className="text-slate-200 font-mono">{testResults.memoryKb}KB</strong>
                     </span>
+
+                    {(testResults.isFallback || testResults.sandbox === 'local-dev') && (
+                      <span
+                        data-testid="local-dev-runner-badge"
+                        className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 shadow-sm"
+                      >
+                        <Terminal className="w-3 h-3 text-amber-400" />
+                        Local dev runner
+                      </span>
+                    )}
                   </div>
                 </div>
 

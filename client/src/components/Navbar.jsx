@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, getDashboardPathForRole } from '../context/AuthContext';
-import { AdaptiveAILogo } from './common/AdaptiveAILogo';
-import { LogOut, Compass, LayoutDashboard } from 'lucide-react';
+import { AdaptIQLogo } from './common/AdaptIQLogo';
+import { LogOut, Compass, LayoutDashboard, Layers } from 'lucide-react';
 
 export const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -35,14 +35,14 @@ export const Navbar = () => {
     <header className="bg-[#52D68A] border-b border-[#42C378] text-[#0B192C] sticky top-0 z-50 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
-        {/* Brand Logo & Name (Adaptive AI with Robot Icon) */}
+        {/* Brand Logo & Name (AdaptIQ with Mascot Icon) */}
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="transform group-hover:scale-110 transition-transform duration-200">
-            <AdaptiveAILogo size={32} iconColor="#0B192C" eyeColor="#52D68A" />
+            <AdaptIQLogo size={32} iconColor="#0B192C" eyeColor="#52D68A" />
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="text-xl sm:text-2xl font-black text-[#0B192C] tracking-tight">
-              Adaptive AI
+              AdaptIQ
             </span>
           </div>
         </Link>
@@ -115,6 +115,14 @@ export const Navbar = () => {
               >
                 <Compass className="w-3.5 h-3.5 text-[#0B192C]" />
                 <span>Study Plan</span>
+              </Link>
+
+              <Link
+                to="/skills/graph"
+                className="hidden md:flex px-3 py-1.5 text-xs font-semibold text-[#0B192C] hover:bg-[#0B192C]/10 rounded-full transition items-center gap-1.5 border border-[#0B192C]/20"
+              >
+                <Layers className="w-3.5 h-3.5 text-[#0B192C]" />
+                <span>Skill Graph</span>
               </Link>
 
               {/* User Name & Role Pill */}

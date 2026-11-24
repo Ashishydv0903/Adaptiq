@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { Button, Card, Badge, SkeletonCard, EmptyState, ErrorState } from '../components/ui';
 import {
   FileText,
   Compass,
@@ -25,7 +26,11 @@ import {
   Cpu,
   Play,
   Clock,
-  History
+  History,
+  Trophy,
+  Users,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 
 export const CandidateDashboard = () => {
@@ -48,42 +53,80 @@ export const CandidateDashboard = () => {
   const [startingTrack, setStartingTrack] = useState(null);
   const [targetedError, setTargetedError] = useState('');
 
+  // Active In-Progress / Paused Session State
+  const [activeSession, setActiveSession] = useState(null);
+
+  // Leaderboard & Gamification State
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState(true);
+  const [togglingLeaderboard, setTogglingLeaderboard] = useState(false);
+
   // Past Sessions History State
   const [pastSessions, setPastSessions] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
 
-  // Load saved resume and past sessions from database on mount
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setLoadingHistory(true);
-        const [resumeRes, historyRes] = await Promise.allSettled([
-          api.get('/users/resume'),
-          api.get('/sessions/my/history')
-        ]);
+  // Load saved resume, active session, leaderboard and past sessions from database on mount
+  const fetchDashboardData = async () => {
+    try {
+      setLoadingHistory(true);
+      setHistoryError(null);
+      const [resumeRes, historyRes, activeRes, leaderboardRes] = await Promise.allSettled([
+        api.get('/users/resume'),
+        api.get('/sessions/my/history'),
+        api.get('/sessions/my/active'),
+        api.get('/users/leaderboard')
+      ]);
 
-        if (resumeRes.status === 'fulfilled' && resumeRes.value?.data?.data) {
-          const { resumeText: savedText, resumeFileName: savedName, resumeUpdatedAt: savedDate, savedJDText } = resumeRes.value.data.data;
-          if (savedText) {
-            setResumeText(savedText);
-            setResumeFileName(savedName || 'saved_resume.txt');
-            setResumeUpdatedAt(savedDate);
-          }
-          if (savedJDText) {
-            setJdText(savedJDText);
-          }
+      if (resumeRes.status === 'fulfilled' && resumeRes.value?.data?.data) {
+        const { resumeText: savedText, resumeFileName: savedName, resumeUpdatedAt: savedDate, savedJDText } = resumeRes.value.data.data;
+        if (savedText) {
+          setResumeText(savedText);
+          setResumeFileName(savedName || 'saved_resume.txt');
+          setResumeUpdatedAt(savedDate);
         }
-
-        if (historyRes.status === 'fulfilled' && historyRes.value?.data?.data?.sessions) {
-          setPastSessions(historyRes.value.data.data.sessions);
+        if (savedJDText) {
+          setJdText(savedJDText);
         }
-      } catch (err) {
-        console.warn('Dashboard data fetch warning:', err.message);
-      } finally {
-        setLoadingHistory(false);
       }
-    };
 
+      if (historyRes.status === 'fulfilled' && historyRes.value?.data?.data?.sessions) {
+        setPastSessions(historyRes.value.data.data.sessions);
+      } else if (historyRes.status === 'rejected') {
+        setHistoryError('Could not load past sessions. Please retry.');
+      }
+
+      if (activeRes.status === 'fulfilled' && activeRes.value?.data?.data?.session) {
+        setActiveSession(activeRes.value.data.data.session);
+      } else {
+        setActiveSession(null);
+      }
+
+      if (leaderboardRes.status === 'fulfilled' && leaderboardRes.value?.data?.data?.leaderboard) {
+        setLeaderboard(leaderboardRes.value.data.data.leaderboard);
+      }
+    } catch (err) {
+      console.warn('Dashboard data fetch warning:', err.message);
+      setHistoryError(err.message || 'Error loading dashboard data');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleToggleLeaderboard = async () => {
+    try {
+      setTogglingLeaderboard(true);
+      const nextOptIn = !leaderboardOptIn;
+      await api.post('/users/leaderboard/toggle', { optIn: nextOptIn });
+      setLeaderboardOptIn(nextOptIn);
+    } catch (err) {
+      console.warn('Failed to toggle leaderboard:', err.message);
+    } finally {
+      setTogglingLeaderboard(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
   }, []);
 
@@ -250,13 +293,12 @@ WHAT WE LOOK FOR:
     }
   };
 
-  // Start Prebuilt Track Practice (Unproctored)
+  // Start Prebuilt Track Practice (Unproctored) via /sessions/practice/start
   const handleStartTrackPractice = async (trackKey) => {
     try {
       setStartingTrack(trackKey);
-      const res = await api.post('/sessions/start', {
-        track: trackKey,
-        isProctored: false
+      const res = await api.post('/sessions/practice/start', {
+        track: trackKey
       });
       const sessionId = res.data.data.session.id || res.data.data.session._id;
       localStorage.setItem('adaptiq_last_session', sessionId);
@@ -411,6 +453,45 @@ WHAT WE LOOK FOR:
           </div>
         </div>
       </div>
+
+      {/* ================= ACTIVE SESSION RESUME BANNER (/sessions/my/active) ================= */}
+      {activeSession && (
+        <div
+          data-testid="resume-session-banner"
+          className="bg-gradient-to-r from-[#132A46] via-[#10243C] to-[#0D1F33] border-2 border-[#52D68A] rounded-3xl p-6 shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in duration-300"
+        >
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#52D68A] animate-ping" />
+              <Badge variant="mint" size="sm">Active Session In Progress</Badge>
+              <span className="text-xs text-slate-300 font-mono capitalize">
+                Track: {activeSession.track || 'General'}
+              </span>
+              <span className="text-xs text-slate-400">
+                • {activeSession.isProctored ? 'AI Proctored' : 'Practice Sandbox'}
+              </span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-bold text-white font-display">
+              Resume Your In-Progress Technical Interview
+            </h2>
+            <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+              You have an active interview session with {activeSession.questionsAnswered || 0} of {activeSession.totalQuestions || 8} questions completed (Round: {activeSession.currentRound || 'Technical'}). Pick up right where you left off.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <Button
+              variant="mint"
+              size="md"
+              icon={Play}
+              onClick={() => navigate(`/interview/${activeSession.id || activeSession._id}`)}
+              className="shadow-lg shadow-[#52D68A]/25"
+            >
+              Resume Interview
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ================= PRIMARY CARD: RESUME + JOB DESCRIPTION INTERVIEW SETUP ================= */}
       <div className="bg-[#0F2238] border-2 border-[#52D68A]/40 hover:border-[#52D68A] rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden transition-all">
@@ -772,10 +853,16 @@ WHAT WE LOOK FOR:
         </div>
 
         {loadingHistory ? (
-          <div className="py-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-            <div className="w-6 h-6 border-2 border-[#52D68A] border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs">Loading your interview history...</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <SkeletonCard />
+            <SkeletonCard />
           </div>
+        ) : historyError ? (
+          <ErrorState
+            title="Unable to load interview history"
+            message={historyError}
+            onRetry={fetchDashboardData}
+          />
         ) : pastSessions.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {pastSessions.map((sess) => {
@@ -838,18 +925,111 @@ WHAT WE LOOK FOR:
             })}
           </div>
         ) : (
-          <div className="bg-[#0B192C] border border-[#1B3A60] rounded-2xl p-6 text-center space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-[#52D68A]/10 text-[#52D68A] flex items-center justify-center mx-auto border border-[#52D68A]/20">
-              <Award className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-white">No interviews recorded yet</h3>
-              <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                Start your first interview using your resume above or choose any practice track below. Your scores and personalized feedback will appear here.
-              </p>
-            </div>
-          </div>
+          <EmptyState
+            title="No interviews recorded yet"
+            description="Start your first interview using your resume above or choose any practice track below. Your scores and personalized feedback will appear here."
+            actionLabel="Start Full Assessment"
+            onAction={handleStartInterview}
+          />
         )}
+      </div>
+
+      {/* ================= COHORT PERFORMANCE LEADERBOARD (/users/leaderboard, /users/leaderboard/toggle) ================= */}
+      <div className="bg-[#0F2238] border border-[#1B3A60] rounded-3xl p-6 sm:p-8 space-y-5 shadow-2xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#1B3A60]">
+          <div>
+            <div className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                Cohort Performance Leaderboard
+              </h2>
+              <Badge variant="mint" size="sm">IRT Trait Calibrated</Badge>
+            </div>
+            <p className="text-xs text-slate-300 mt-1">
+              Top candidate trait rankings calibrated via Item Response Theory (θ) and percentile performance.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleLeaderboard}
+              disabled={togglingLeaderboard}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition ${
+                leaderboardOptIn
+                  ? 'bg-[#52D68A]/15 border-[#52D68A]/50 text-[#52D68A]'
+                  : 'bg-[#0B192C] border-[#1B3A60] text-slate-400'
+              }`}
+            >
+              {leaderboardOptIn ? (
+                <>
+                  <ToggleRight className="w-4 h-4 text-[#52D68A]" />
+                  <span>Public on Leaderboard (Opted-in)</span>
+                </>
+              ) : (
+                <>
+                  <ToggleLeft className="w-4 h-4 text-slate-400" />
+                  <span>Hidden from Leaderboard (Opted-out)</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Leaderboard Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#1B3A60] text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                <th className="pb-3 pl-2">Rank</th>
+                <th className="pb-3">Candidate</th>
+                <th className="pb-3">Track</th>
+                <th className="pb-3 text-center">Ability θ</th>
+                <th className="pb-3 text-center">Percentile</th>
+                <th className="pb-3 text-center">Streak</th>
+                <th className="pb-3 pr-2">Badges</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1B3A60]/50 text-slate-200">
+              {leaderboard.length > 0 ? (
+                leaderboard.map((c) => (
+                  <tr key={c.rank} className="hover:bg-[#132A46]/40 transition">
+                    <td className="py-3 pl-2 font-bold font-mono">
+                      {c.rank === 1 ? '🥇 1' : c.rank === 2 ? '🥈 2' : c.rank === 3 ? '🥉 3' : `#${c.rank}`}
+                    </td>
+                    <td className="py-3 font-semibold text-white flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-[#1B3A60] text-[#52D68A] flex items-center justify-center font-bold text-[10px]">
+                        {c.name.charAt(0)}
+                      </div>
+                      <span>{c.name}</span>
+                    </td>
+                    <td className="py-3 font-mono text-slate-300">{c.track}</td>
+                    <td className="py-3 text-center font-mono font-bold text-[#52D68A]">{c.theta}</td>
+                    <td className="py-3 text-center font-mono">{c.percentile}%</td>
+                    <td className="py-3 text-center font-mono">{c.streak}🔥</td>
+                    <td className="py-3 pr-2">
+                      <div className="flex flex-wrap gap-1">
+                        {(c.badges || []).map((b, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#1B3A60]/60 text-slate-300 border border-[#1B3A60]"
+                          >
+                            {b}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="py-6 text-center text-slate-400">
+                    No leaderboard entries found. Complete an assessment to enter the cohort ranking!
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

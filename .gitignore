@@ -46,6 +46,13 @@ temp/*
 !temp/.gitkeep
 
 # Local database
+data/
 mongodb_data/
+
+# Playwright Test Results
+test-results/
+playwright-report/
+client/test-results/
+client/playwright-report/
 *.sqlite
 *.db

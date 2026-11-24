@@ -37,6 +37,13 @@ const skillSchema = new mongoose.Schema(
     weight: {
       type: Number,
       default: 1.0
+    },
+    embedding: {
+      vector: { type: [Number], default: [] },
+      model: { type: String, default: 'local-deterministic-64' },
+      embeddingModel: { type: String, default: 'local-deterministic-64' },
+      dimension: { type: Number, default: 64 },
+      updatedAt: { type: Date, default: Date.now }
     }
   },
   {

@@ -80,6 +80,13 @@ const questionSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Ideal benchmark answer is required for Explainable AI comparison']
     },
+    embedding: {
+      vector: { type: [Number], default: [] },
+      model: { type: String, default: 'local-deterministic-64' },
+      embeddingModel: { type: String, default: 'local-deterministic-64' },
+      dimension: { type: Number, default: 64 },
+      updatedAt: { type: Date, default: Date.now }
+    },
     // Evaluation rubric weights
     rubricWeights: {
       technicalAccuracy: { type: Number, default: 0.35 },
@@ -88,10 +95,18 @@ const questionSchema = new mongoose.Schema(
       codeEfficiency: { type: Number, default: 0.15 },
       problemSolving: { type: Number, default: 0.15 }
     },
+    topic: {
+      type: String,
+      default: ''
+    },
+    isDemo: {
+      type: Boolean,
+      default: false
+    },
     // Fairness DIF status
     status: {
       type: String,
-      enum: ['active', 'quarantined', 'review'],
+      enum: ['active', 'quarantined', 'review', 'pending'],
       default: 'active'
     },
     difStats: {

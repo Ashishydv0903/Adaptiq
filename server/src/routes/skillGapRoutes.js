@@ -18,6 +18,7 @@ import {
 } from '../controllers/skillGapController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import { requireRoadmapOwnership } from '../middleware/ownership.js';
 
 const router = express.Router();
 const upload = multer({
@@ -60,7 +61,7 @@ router.post('/jd-generate-assessment', generateAssessmentFromJD);
 
 // Roadmap & Progress
 router.post('/roadmap', validate(roadmapSchema), generateCandidateRoadmap);
-router.patch('/roadmap/:id/progress', validate(progressSchema), updateRoadmapProgress);
+router.patch('/roadmap/:id/progress', requireRoadmapOwnership, validate(progressSchema), updateRoadmapProgress);
 
 // PDF Export
 router.post('/roadmap/export-pdf', downloadRoadmapPdf);

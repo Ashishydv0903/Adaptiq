@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
       match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,})+$/,
         'Please provide a valid email'
       ]
     },
@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['candidate', 'recruiter', 'admin'],
       default: 'candidate'
+    },
+    isDemo: {
+      type: Boolean,
+      default: false
     },
     demographicGroup: {
       type: String,
@@ -68,13 +72,12 @@ const userSchema = new mongoose.Schema(
 );
 
 // Hash password before saving
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   if (!this.isModified('password')) {
-    return next();
+    return;
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
-  next();
 });
 
 // Compare password

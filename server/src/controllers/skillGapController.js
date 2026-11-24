@@ -25,7 +25,7 @@ import {
   generateJDBasedAssessmentPlan
 } from '../services/jd/jdAnalyzer.js';
 import { generateLearningRoadmap } from '../services/roadmap/roadmapGenerator.js';
-import { exportRoadmapToPdf } from '../services/report/pdfReport.js';
+import { exportRoadmapToPdf } from '../services/report/pdfReportService.js';
 import { comprehensiveSkills } from '../seed/skillsData.js';
 import { allQuestions } from '../seed/questions/allQuestions.js';
 

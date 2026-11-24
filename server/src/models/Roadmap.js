@@ -15,6 +15,10 @@ const roadmapSchema = new mongoose.Schema(
       type: Number,
       required: true
     },
+    isDemo: {
+      type: Boolean,
+      default: false
+    },
     skillGaps: [
       {
         skillId: { type: mongoose.Schema.Types.ObjectId, ref: 'Skill' },

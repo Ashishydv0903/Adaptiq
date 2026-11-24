@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { generateEmbedding, generateStructuredJson, PROMPT_VERSIONS } from '../llm/index.js';
+import { generateEmbedding, generateStructuredJson, PROMPT_VERSIONS, LLMUnavailableError } from '../llm/index.js';
 import { calculateCosineSimilarity } from '../../ml/scoringModel.js';
 import { verifyQuoteInAnswer } from './rubricScorer.js';
 import { env } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
 
 export const CONCEPT_PROMPT_VERSION = PROMPT_VERSIONS.CONCEPT_COVERAGE;
 
@@ -123,13 +124,24 @@ export async function detectConceptCoverage({ question, candidateAnswer }) {
     };
   });
 
-  const llmResponse = await generateStructuredJson(prompt, ConceptCoverageResultSchema, {
-    temperature: 0,
-    model,
-    fallback: { concepts: fallbackConcepts }
-  });
-
-  const rawConceptResults = llmResponse.data?.concepts || fallbackConcepts;
+  let rawConceptResults = fallbackConcepts;
+  let isHeuristic = false;
+  try {
+    const llmResponse = await generateStructuredJson(prompt, ConceptCoverageResultSchema, {
+      temperature: 0,
+      model,
+      fallback: { concepts: fallbackConcepts }
+    });
+    rawConceptResults = llmResponse.data?.concepts || fallbackConcepts;
+  } catch (err) {
+    if (err instanceof LLMUnavailableError || err.name === 'LLMUnavailableError') {
+      logger.warn(`[ConceptCoverage] LLM unavailable (${err.message}); utilizing embedding-based heuristic fallback.`);
+      rawConceptResults = fallbackConcepts;
+      isHeuristic = true;
+    } else {
+      throw err;
+    }
+  }
 
   // Step 3: Verify quotes and merge with embedding similarity
   let coveredCount = 0;
@@ -174,7 +186,8 @@ export async function detectConceptCoverage({ question, candidateAnswer }) {
     totalConcepts,
     semanticSimilarity: Number(semanticSimilarityToIdeal.toFixed(3)),
     promptVersion: CONCEPT_PROMPT_VERSION,
-    model
+    model,
+    isHeuristic
   };
 }
 

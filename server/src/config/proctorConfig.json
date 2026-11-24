@@ -1,0 +1,130 @@
+{
+  "proctorConfigs": {
+    "consentVersion": "1.0.0",
+    "samplingIntervalMs": 500,
+    "retentionDays": 30,
+    "onRed": "pause",
+    "escalation": {
+      "yellowsToOrange": 3,
+      "orangesToRed": 3
+    },
+    "evidence": {
+      "rollingBufferSeconds": 10,
+      "storageProvider": "gridfs",
+      "retentionDays": 30,
+      "onRed": "pause"
+    },
+    "thresholds": {
+      "lighting": {
+        "minLuminance": 40,
+        "maxLuminance": 235
+      },
+      "headPose": {
+        "maxYawDeg": 25,
+        "maxPitchDeg": 20
+      },
+      "iris": {
+        "maxGazeDeviation": 0.28
+      },
+      "durations": {
+        "lookingAwayYellowMs": 1500,
+        "lookingAwayOrangeMs": 3500,
+        "noFaceYellowMs": 1200,
+        "noFaceOrangeMs": 3000,
+        "noFaceRedMs": 6000
+      },
+      "identity": {
+        "maxEmbeddingDistance": 0.50
+      },
+      "prohibitedObjects": [
+        "cell phone",
+        "mobile phone",
+        "phone",
+        "book",
+        "laptop",
+        "tablet"
+      ],
+      "browser": {
+        "largePasteChars": 80,
+        "virtualCameraKeywords": [
+          "obs",
+          "virtual",
+          "manycam",
+          "v4l2loopback",
+          "droidcam",
+          "fake",
+          "camo",
+          "xsplit",
+          "ndi"
+        ],
+        "devtoolsKeys": ["f12", "i", "j", "c", "u"]
+      },
+      "typing": {
+        "minKeystrokesForIkiAnalysis": 15,
+        "uniformIkiStdDevMs": 12,
+        "maxHumanWpm": 190,
+        "fastAnswerMinChars": 100,
+        "fastAnswerMaxSeconds": 3
+      },
+      "audio": {
+        "speechThresholdRatio": 0.16,
+        "silentNoiseFloorRatio": 0.04,
+        "twoSpeakerFormantVarianceThreshold": 0.35,
+        "writeModeSpeechDurationMs": 1200
+      },
+      "timeDecay": {
+        "halfLifeMinutes": 15,
+        "initialScore": 100
+      }
+    },
+    "baseSeverityMap": {
+      "LOOKING_AWAY": "yellow",
+      "NO_FACE": "yellow",
+      "MULTIPLE_FACES": "red",
+      "IDENTITY_MISMATCH": "red",
+      "PROHIBITED_OBJECT": "red",
+      "CAMERA_BLOCKED_DARK": "orange",
+      "DEVICE_DISCONNECTED": "orange",
+      "TAB_SWITCH": "yellow",
+      "WINDOW_BLUR": "yellow",
+      "FULLSCREEN_EXIT": "orange",
+      "CLIPBOARD_ACTION": "yellow",
+      "RIGHT_CLICK": "yellow",
+      "DEVTOOLS_SHORTCUT": "orange",
+      "WINDOW_RESIZE_EXTRA_MONITOR": "orange",
+      "VIRTUAL_CAMERA": "orange",
+      "TYPING_ANOMALY_LARGE_PASTE": "orange",
+      "TYPING_ANOMALY_UNIFORM_KEYSTROKES": "orange",
+      "IMPLAUSIBLY_FAST_ANSWER": "orange",
+      "AI_TEXT_RISK_INDICATOR": "orange",
+      "SPEECH_IN_WRITE_MODE": "yellow",
+      "LIPS_MOVING_NO_AUDIO": "yellow",
+      "TWO_SPEAKER_HEURISTIC": "orange"
+    }
+  },
+  "SEVERITY_BASE_DEDUCTIONS": {
+    "yellow": 3,
+    "orange": 10,
+    "red": 25
+  },
+  "EVENT_BASE_DEDUCTIONS": {
+    "TAB_SWITCH": 3,
+    "WINDOW_BLUR": 3,
+    "RIGHT_CLICK": 2,
+    "CLIPBOARD_ACTION": 3,
+    "SPEECH_IN_WRITE_MODE": 4,
+    "LIPS_MOVING_NO_AUDIO": 4,
+    "FULLSCREEN_EXIT": 8,
+    "MULTIPLE_FACES": 25,
+    "PROHIBITED_OBJECT": 25,
+    "DEVTOOLS_SHORTCUT": 12,
+    "WINDOW_RESIZE_EXTRA_MONITOR": 8,
+    "VIRTUAL_CAMERA": 15,
+    "TYPING_ANOMALY_LARGE_PASTE": 10,
+    "TYPING_ANOMALY_UNIFORM_KEYSTROKES": 12,
+    "IMPLAUSIBLY_FAST_ANSWER": 12,
+    "AI_TEXT_RISK_INDICATOR": 10,
+    "TWO_SPEAKER_HEURISTIC": 12,
+    "IDENTITY_MISMATCH": 35
+  }
+}

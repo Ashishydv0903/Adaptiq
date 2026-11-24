@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth, getDashboardPathForRole } from '../context/AuthContext';
-import { AdaptiveAILogo } from '../components/common/AdaptiveAILogo';
-import { UserPlus, User, Mail, Key, Award, Briefcase, AlertCircle } from 'lucide-react';
+import { AdaptIQLogo } from '../components/common/AdaptIQLogo';
+import { UserPlus, User, Mail, Key, AlertCircle } from 'lucide-react';
 
 export const RegisterPage = () => {
   const { register } = useAuth();
@@ -12,7 +12,6 @@ export const RegisterPage = () => {
     name: '',
     email: '',
     password: '',
-    role: 'candidate',
     demographicGroup: 'unspecified'
   });
   const [error, setError] = useState('');
@@ -20,10 +19,6 @@ export const RegisterPage = () => {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleRoleSelect = (role) => {
-    setFormData({ ...formData, role });
   };
 
   const handleSubmit = async (e) => {
@@ -47,46 +42,12 @@ export const RegisterPage = () => {
         {/* Header */}
         <div className="text-center">
           <div className="inline-flex p-3 rounded-2xl bg-[#52D68A]/10 text-[#52D68A] mb-3 border border-[#52D68A]/20">
-            <AdaptiveAILogo size={36} iconColor="#52D68A" eyeColor="#0F2238" />
+            <AdaptIQLogo size={36} iconColor="#52D68A" eyeColor="#0F2238" />
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">Create your Account</h2>
           <p className="text-sm text-slate-300 mt-1">
-            Join Adaptive AI to practice mock interviews with plain-English feedback.
+            Join AdaptIQ to practice mock interviews with plain-English feedback.
           </p>
-        </div>
-
-        {/* Role Toggle */}
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-200 mb-2">
-            I am joining as a
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => handleRoleSelect('candidate')}
-              className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                formData.role === 'candidate'
-                  ? 'bg-[#52D68A]/15 border-[#52D68A] text-white ring-1 ring-[#52D68A]'
-                  : 'bg-[#0B192C] border-[#1B3A60] text-slate-300 hover:border-slate-500'
-              }`}
-            >
-              <Award className="w-5 h-5 text-[#52D68A]" />
-              <span className="text-xs font-semibold">Candidate / Student</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRoleSelect('recruiter')}
-              className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
-                formData.role === 'recruiter'
-                  ? 'bg-amber-500/15 border-amber-400 text-amber-200 ring-1 ring-amber-400'
-                  : 'bg-[#0B192C] border-[#1B3A60] text-slate-300 hover:border-slate-500'
-              }`}
-            >
-              <Briefcase className="w-5 h-5 text-amber-400" />
-              <span className="text-xs font-semibold">Recruiter / Team</span>
-            </button>
-          </div>
         </div>
 
         {/* Error Alert */}

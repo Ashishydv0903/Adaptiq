@@ -18,6 +18,10 @@ import SpokenExplanationBox from '../components/interview/SpokenExplanationBox';
 import ComprehensiveFeedbackReport from '../components/interview/ComprehensiveFeedbackReport';
 import { useProctor } from '../hooks/useProctor';
 import { ProctorWarningBanner } from '../components/interview/ProctorWarningBanner';
+import ProctorDemoControls from '../components/interview/ProctorDemoControls';
+import InterviewHeader from '../components/interview/InterviewHeader';
+import InterviewExitModal from '../components/interview/InterviewExitModal';
+import InterviewPausedModal from '../components/interview/InterviewPausedModal';
 import {
   Send,
   CheckCircle2,
@@ -42,10 +46,11 @@ import {
   CameraOff,
   LogOut,
   XCircle,
-  ArrowLeft
+  ArrowLeft,
+  Lightbulb
 } from 'lucide-react';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5000';
 
 export const InterviewScreen = () => {
   const { sessionId } = useParams();
@@ -72,8 +77,11 @@ export const InterviewScreen = () => {
   const [activeFollowUp, setActiveFollowUp] = useState(null);
   const [followUpsCompleted, setFollowUpsCompleted] = useState([]);
 
-  // Behavioral STAR state
+  // Behavioral STAR state & Standalone Evaluator
   const [starFeedback, setStarFeedback] = useState(null);
+  const [evaluatingStar, setEvaluatingStar] = useState(false);
+  const [unlockedHints, setUnlockedHints] = useState([]);
+  const [unlockingHint, setUnlockingHint] = useState(false);
 
   // Explainable AI Modal State
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -147,7 +155,12 @@ export const InterviewScreen = () => {
     focusRetentionPct,
     trustDeductions,
     auditLog,
-    isFaceMissingLong
+    isFaceMissingLong,
+    isModelsLoading,
+    modelsError,
+    isLowPerformanceMode,
+    retryModels,
+    injectDemoEvent
   } = useProctor({
     videoRef: proctorVideoRef,
     sessionId,
@@ -276,8 +289,10 @@ export const InterviewScreen = () => {
     let socket;
 
     // Socket.io connection
+    const token = localStorage.getItem('token');
     socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      auth: { token }
     });
     socketRef.current = socket;
 
@@ -496,10 +511,56 @@ export const InterviewScreen = () => {
     setActiveFollowUp(null);
   };
 
+  // Standalone STAR Evaluator (/sessions/:id/evaluate-star)
+  const handleEvaluateStar = async () => {
+    if (!answer.trim()) {
+      alert('Please enter or dictate your response before checking STAR storytelling structure.');
+      return;
+    }
+    try {
+      setEvaluatingStar(true);
+      const res = await api.post(`/sessions/${sessionId}/evaluate-star`, {
+        questionId: currentQuestion._id || currentQuestion.id,
+        candidateAnswer: answer
+      });
+      if (res.data?.data?.evaluation) {
+        setStarFeedback(res.data.data.evaluation);
+      }
+    } catch (err) {
+      console.error('STAR evaluation error:', err);
+      alert(err.response?.data?.message || 'Could not evaluate STAR structure.');
+    } finally {
+      setEvaluatingStar(false);
+    }
+  };
+
+  // Unlock Question Hints (/sessions/:id/unlock-hint)
+  const handleUnlockHint = async (level = 1) => {
+    try {
+      setUnlockingHint(true);
+      const res = await api.post(`/sessions/${sessionId}/unlock-hint`, {
+        questionId: currentQuestion._id || currentQuestion.id,
+        hintLevel: level
+      });
+      if (res.data?.data) {
+        const hintObj = res.data.data.unlockedHint || { level, hintText: `Hint level ${level} unlocked.` };
+        setUnlockedHints((prev) => {
+          if (prev.some((h) => h.level === hintObj.level)) return prev;
+          return [...prev, hintObj];
+        });
+      }
+    } catch (err) {
+      console.warn('Hint unlock warning:', err.message);
+    } finally {
+      setUnlockingHint(false);
+    }
+  };
+
   // Submit Answer to Main Question
-  const handleSubmitAnswer = async (overrideAnswer, overrideLang) => {
+  const handleSubmitAnswer = async (overrideAnswer, overrideLang, options = {}) => {
     const finalAnswer = overrideAnswer !== undefined ? overrideAnswer : answer;
     const finalLang = overrideLang || codingLanguage || 'javascript';
+    const continueWithoutRunning = Boolean(options.continueWithoutRunning);
 
     if (!finalAnswer.trim() && currentQuestion?.roundType !== 'mcq') {
       alert('Please provide an answer before submitting.');
@@ -528,7 +589,8 @@ export const InterviewScreen = () => {
         audioUrl: answerTelemetry?.audioUrl || '',
         editedAfterTranscription: Boolean(answerTelemetry?.editedAfterTranscription),
         speechMetrics: answerTelemetry?.speechMetrics || null,
-        spokenExplanation: spokenExplanation || null
+        spokenExplanation: spokenExplanation || null,
+        continueWithoutRunning
       });
 
       const { data } = res.data;
@@ -554,6 +616,13 @@ export const InterviewScreen = () => {
         }));
       }
 
+      if (session?.isPractice && data.feedback) {
+        setActiveEvaluation(data.feedback);
+        setFeedbackModalOpen(true);
+      }
+
+      setUnlockedHints([]);
+
       if (data.isCompleted) {
         setSession((prev) => ({ ...prev, status: 'completed' }));
         setCurrentQuestion(null);
@@ -566,7 +635,16 @@ export const InterviewScreen = () => {
         questionStartTimeRef.current = Date.now();
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit answer');
+      const isUnavailable =
+        err.response?.status === 503 ||
+        err.response?.data?.code === 'EXECUTION_UNAVAILABLE' ||
+        (err.response?.data?.message || '').includes('unavailable');
+
+      if (isUnavailable) {
+        setError('Code execution is unavailable right now. Retry, or continue without running.');
+      } else {
+        setError(err.response?.data?.message || 'Failed to submit answer');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -848,38 +926,15 @@ export const InterviewScreen = () => {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Persistent Top Header Bar with Exit Interview Button */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#1B3A60] bg-[#0B192C]/90 backdrop-blur sticky top-0 z-30 pt-1">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-[#52D68A]" />
-            <span className="text-sm font-bold text-white tracking-tight">
-              {session?.targetRole || 'Adaptive AI Technical Interview'}
-            </span>
-          </div>
-          {isProctoringActive && (
-            <span className="hidden sm:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full font-semibold bg-[#52D68A]/10 text-[#52D68A] border border-[#52D68A]/20">
-              ● Continuous Proctoring
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => setShowExitModal(true)}
-            className="px-3.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border border-rose-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-            id="exit-interview-header-btn"
-            title="Exit interview session"
-          >
-            <LogOut className="w-3.5 h-3.5 text-rose-400" />
-            <span>Exit Interview</span>
-          </button>
-        </div>
-      </div>
+      <InterviewHeader
+        session={session}
+        isProctoringActive={isProctoringActive}
+        onExitClick={() => setShowExitModal(true)}
+      />
 
       {/* Recruiter Immediate Advisory Warning Banner */}
       {sessionControlState?.activeWarning && (
-        <div className="p-4 bg-rose-500/15 border-2 border-rose-500/60 rounded-2xl text-rose-200 text-sm flex items-start justify-between gap-3 shadow-xl animate-bounce">
+        <div role="alert" aria-live="assertive" className="p-4 bg-rose-500/15 border-2 border-rose-500/60 rounded-2xl text-rose-200 text-sm flex items-start justify-between gap-3 shadow-xl animate-bounce">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
             <div>
@@ -909,7 +964,7 @@ export const InterviewScreen = () => {
 
       {/* Integrity Warning Banner */}
       {isProctoringActive && integrityWarnings > 0 && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs flex items-center justify-between">
+        <div role="status" aria-live="polite" className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
             <span>Window blur detected ({integrityWarnings} switch). Proctoring integrity log active.</span>
@@ -1118,10 +1173,10 @@ export const InterviewScreen = () => {
               sessionId={sessionId}
               code={answer}
               onChange={setAnswer}
-              onSubmitSolution={(finalCode, lang) => {
+              onSubmitSolution={(finalCode, lang, testResults, codeReview, options) => {
                 setAnswer(finalCode);
                 setCodingLanguage(lang);
-                handleSubmitAnswer(finalCode, lang);
+                handleSubmitAnswer(finalCode, lang, options);
               }}
               submitting={submitting}
             />
@@ -1171,6 +1226,48 @@ export const InterviewScreen = () => {
           />
         )}
 
+        {/* Behavioral STAR Structured Evaluation Display */}
+        {starFeedback && (
+          <div className="pt-2 animate-in fade-in">
+            <StarFeedbackCard starEvaluation={starFeedback} />
+          </div>
+        )}
+
+        {/* Practice Mode Hint Ladder (/sessions/:id/unlock-hint) */}
+        {(session?.isPractice || currentQuestion?.hints?.length > 0) && (
+          <div className="p-3.5 bg-[#0B192C] border border-[#1B3A60] rounded-2xl space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                Practice Hint Ladder
+              </span>
+              <button
+                type="button"
+                onClick={() => handleUnlockHint(unlockedHints.length + 1)}
+                disabled={unlockingHint || unlockedHints.length >= 3}
+                className="px-3 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-500/30 text-xs font-semibold transition disabled:opacity-40"
+              >
+                {unlockingHint ? 'Unlocking...' : unlockedHints.length >= 3 ? 'All Hints Revealed' : `Reveal Hint ${unlockedHints.length + 1}`}
+              </button>
+            </div>
+
+            {unlockedHints.length > 0 ? (
+              <div className="space-y-1.5 pt-1">
+                {unlockedHints.map((h, idx) => (
+                  <div key={idx} className="p-2.5 rounded-xl bg-amber-950/20 border border-amber-500/20 text-xs text-amber-200">
+                    <span className="font-bold text-amber-400">Level {h.level || idx + 1}: </span>
+                    {h.hintText}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-slate-400">
+                Stuck? In practice mode you can reveal progressive hints with zero hiring penalties.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Error message */}
         {error && <div className="text-xs text-rose-400 font-medium">{error}</div>}
 
@@ -1182,6 +1279,25 @@ export const InterviewScreen = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
+              {/* Standalone STAR Evaluator Button for Behavioral Rounds */}
+              {(currentQuestion.roundType === 'behavioral' || currentQuestion.topic?.toLowerCase().includes('behavioral')) && (
+                <button
+                  type="button"
+                  onClick={handleEvaluateStar}
+                  disabled={evaluatingStar || !answer.trim()}
+                  className="px-4 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-sm font-semibold rounded-xl transition flex items-center gap-2 disabled:opacity-50"
+                >
+                  {evaluatingStar ? (
+                    <div className="w-4 h-4 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
+                      Check STAR Structure
+                    </>
+                  )}
+                </button>
+              )}
+
               {/* Submit & Next Question */}
               <button
                 type="button"
@@ -1235,99 +1351,55 @@ export const InterviewScreen = () => {
       )}
 
       {/* Exit Interview Confirmation Dialog Modal */}
-      {showExitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#071322]/85 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#0F2238] border border-[#1B3A60] rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 flex-shrink-0">
-                <LogOut className="w-6 h-6" />
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowExitModal(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-[#1B3A60]/60 transition cursor-pointer"
-              >
-                <XCircle className="w-5 h-5" />
-              </button>
-            </div>
+      <InterviewExitModal
+        isOpen={showExitModal}
+        isExiting={isExiting}
+        onClose={() => setShowExitModal(false)}
+        onConfirmExit={handleConfirmExitInterview}
+      />
 
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-white tracking-tight">Exit Interview Session?</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Are you sure you want to end your interview session now?
-              </p>
-            </div>
+      {/* Paused Overlay Modal */}
+      <InterviewPausedModal
+        isPaused={isPaused}
+        remainingSeconds={remainingTimerSeconds}
+        onResume={handleResumeSession}
+      />
 
-            <div className="p-3.5 bg-[#071322] rounded-2xl border border-[#1B3A60] space-y-2 text-xs text-slate-300">
-              <div className="font-semibold text-slate-200">Session Exit Summary:</div>
-              <ul className="space-y-1.5 text-[11px] text-slate-400 list-disc list-inside">
-                <li>Your completed responses ({session?.responses?.length || 0} questions) will be securely saved.</li>
-                <li>A partial scorecard and evaluation report will be generated.</li>
-                <li>All proctoring logs, focus telemetry, and integrity audit trails will be stored.</li>
-                <li>You will be redirected to your evaluation summary.</li>
-              </ul>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowExitModal(false)}
-                disabled={isExiting}
-                className="w-full sm:flex-1 py-2.5 px-4 bg-[#0B192C] hover:bg-[#132A46] border border-[#1B3A60] text-slate-200 text-xs font-semibold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                Continue Interview
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmExitInterview}
-                disabled={isExiting}
-                className="w-full sm:flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
-                id="confirm-end-interview-btn"
-              >
-                {isExiting ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>End Interview</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
+      {/* Low Performance Mode Warning Pill */}
+      {isLowPerformanceMode && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 bg-amber-950/90 border border-amber-500/50 rounded-full px-4 py-1 text-xs text-amber-200 shadow-xl backdrop-blur-md flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-amber-400" />
+          <span>Low Performance Mode: Vision inference exceeded 400ms. Reduced frame rate to preserve device responsiveness.</span>
         </div>
       )}
 
-      {/* Paused Overlay Modal */}
-      {isPaused && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full text-center space-y-5 shadow-2xl">
-            <div className="inline-flex p-4 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
-              <Pause className="w-8 h-8" />
+      {/* Models Error Blocking Overlay (Fail Loudly) */}
+      {modelsError && (
+        <div className="fixed inset-0 z-50 bg-[#0B192C]/95 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0F2238] border-2 border-rose-500 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-4 animate-in fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto">
+              <AlertOctagon className="w-8 h-8" />
             </div>
-
-            <div className="space-y-1">
-              <h3 className="text-xl font-bold text-white tracking-tight">Assessment Paused</h3>
-              <p className="text-xs text-slate-400">
-                Your question timer is safely frozen on the server at{' '}
-                <strong className="text-white font-mono">{remainingTimerSeconds}s</strong> remaining.
-              </p>
-            </div>
-
-            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300">
-              You can resume now, or return from your dashboard whenever you are ready.
-            </div>
-
+            <h2 className="text-xl font-bold text-white tracking-tight">AI Proctoring Models Required</h2>
+            <p className="text-xs text-rose-200 leading-relaxed">
+              {modelsError}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              The interview cannot proceed without computer vision integrity models. There is no silent fallback to simulation.
+            </p>
             <button
-              onClick={handleResumeSession}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2"
+              type="button"
+              onClick={retryModels}
+              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 mx-auto shadow-lg"
             >
-              <Play className="w-4 h-4 fill-current" /> Resume Assessment
+              <RotateCcw className="w-4 h-4" /> Retry Loading Models
             </button>
           </div>
         </div>
       )}
+
+      {/* Viva Demo Controls (visible only when VITE_DEMO_MODE === 'true') */}
+      <ProctorDemoControls onInjectEvent={injectDemoEvent} />
     </div>
   );
 };

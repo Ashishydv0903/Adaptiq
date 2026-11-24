@@ -1,5 +1,8 @@
 import { Server } from 'socket.io';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+import { User } from '../models/User.js';
 import { logger } from '../config/logger.js';
 import { AssessmentSession } from '../models/AssessmentSession.js';
 import { ReviewQueueItem } from '../models/ReviewQueueItem.js';
@@ -105,30 +108,117 @@ export const initSocket = (httpServer, clientUrl = '*') => {
     }
   });
 
-  io.on('connection', (socket) => {
-    logger.info(`🔌 Socket connected: ${socket.id}`);
+  // Authenticate Socket.io connection via JWT
+  io.use(async (socket, next) => {
+    try {
+      const token =
+        socket.handshake.auth?.token ||
+        (socket.handshake.headers?.authorization && socket.handshake.headers.authorization.replace('Bearer ', ''));
 
-    // Join a specific assessment session room
-    socket.on('join_session', (sessionId) => {
+      if (!token) {
+        return next(new Error('Authentication error: Missing token'));
+      }
+
+      const decoded = jwt.verify(token, env.JWT_SECRET);
+      if (!decoded || !decoded.id) {
+        return next(new Error('Authentication error: Invalid token'));
+      }
+
+      let user = null;
+      if (mongoose.connection.readyState === 1) {
+        try {
+          user = await User.findById(decoded.id).select('-password');
+        } catch (e) {
+          logger.warn(`Could not load user in socket authentication: ${e.message}`);
+        }
+      }
+
+      if (!user) {
+        user = {
+          _id: decoded.id,
+          id: decoded.id,
+          email: decoded.email,
+          role: decoded.role || 'candidate',
+          name: decoded.name
+        };
+      }
+
+      socket.data.user = user;
+      next();
+    } catch (err) {
+      return next(new Error('Authentication error: ' + (err.message || 'Invalid token')));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    logger.info(`🔌 Socket connected: ${socket.id} (${socket.data?.user?.email || 'authenticated'})`);
+
+    // Join a specific assessment session room (candidate must be session owner, or recruiter/admin)
+    socket.on('join_session', async (sessionId) => {
+      const user = socket.data?.user;
+      if (!user) {
+        socket.emit('error', { message: 'Unauthorized: User not found' });
+        return;
+      }
+
+      // Recruiters and admins can join any session room
+      if (user.role === 'recruiter' || user.role === 'admin') {
+        socket.join(`session:${sessionId}`);
+        logger.info(`Privileged socket ${socket.id} (${user.role}) joined room session:${sessionId}`);
+        return;
+      }
+
+      // Candidate must own the session
+      if (mongoose.connection.readyState === 1 && sessionId) {
+        try {
+          const session = await AssessmentSession.findById(sessionId).select('userId candidateId');
+          if (session) {
+            const ownerId = String(session.userId || session.candidateId || '');
+            const userId = String(user._id || user.id || '');
+            if (ownerId && userId && ownerId !== userId) {
+              socket.emit('error', { message: 'Forbidden: You do not own this session' });
+              return;
+            }
+          }
+        } catch (err) {
+          logger.warn(`Session ownership lookup error for socket ${socket.id}: ${err.message}`);
+        }
+      }
+
       socket.join(`session:${sessionId}`);
       logger.info(`Socket ${socket.id} joined room session:${sessionId}`);
     });
 
-    // Join admin proctoring stream
+    // Join admin proctoring stream (recruiter/admin only)
     socket.on('join_admin_proctoring', () => {
+      const user = socket.data?.user;
+      if (!user || (user.role !== 'recruiter' && user.role !== 'admin')) {
+        socket.emit('error', { message: 'Unauthorized: Recruiter or admin role required' });
+        return;
+      }
       socket.join('admin:proctoring');
-      logger.info(`Socket ${socket.id} joined admin proctoring room`);
+      logger.info(`Socket ${socket.id} (${user.role}) joined admin proctoring room`);
     });
 
-    // Join recruiter live-monitor room
+    // Join recruiter live-monitor room (recruiter/admin only)
     socket.on('join_recruiter_monitor', () => {
+      const user = socket.data?.user;
+      if (!user || (user.role !== 'recruiter' && user.role !== 'admin')) {
+        socket.emit('error', { message: 'Unauthorized: Recruiter or admin role required' });
+        return;
+      }
       socket.join('recruiter:proctoring');
       socket.join('admin:proctoring');
-      logger.info(`Socket ${socket.id} joined recruiter live-monitor room`);
+      logger.info(`Socket ${socket.id} (${user.role}) joined recruiter live-monitor room`);
     });
 
-    // WebRTC Live Video Signaling (simple-peer)
+    // WebRTC Live Video Signaling (simple-peer) - only recruiter/admin can request video feeds
     socket.on('webrtc:request_feed', ({ sessionId }) => {
+      const user = socket.data?.user;
+      if (!user || (user.role !== 'recruiter' && user.role !== 'admin')) {
+        socket.emit('error', { message: 'Unauthorized: Only recruiters and admins can request video feeds' });
+        return;
+      }
       logger.info(`📹 WebRTC feed requested for session ${sessionId} by ${socket.id}`);
       socket.to(`session:${sessionId}`).emit('webrtc:feed_requested', {
         sessionId,

@@ -9,7 +9,8 @@ import {
   approveQuestion,
   recalibrateIRT,
   getLeaderboard,
-  toggleLeaderboardOptIn
+  toggleLeaderboardOptIn,
+  createAdminUser
 } from '../controllers/adminRecruiterController.js';
 
 const router = express.Router();
@@ -74,6 +75,7 @@ router.get('/recruiter/candidates', authorize('recruiter', 'admin'), getRecruite
 router.post('/recruiter/invite', authorize('recruiter', 'admin'), inviteCandidate);
 
 // Admin Question Generation, Approval & Recalibration Endpoints
+router.post('/admin/create-user', authorize('admin'), createAdminUser);
 router.get('/admin/approval-queue', authorize('admin'), getQuestionApprovalQueue);
 router.post('/admin/generate-question', authorize('admin'), generateAIQuestion);
 router.post('/admin/questions/:id/approve', authorize('admin'), approveQuestion);

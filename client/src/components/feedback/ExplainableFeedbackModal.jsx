@@ -143,7 +143,7 @@ export default function ExplainableFeedbackModal({
         {/* Header */}
         <div className="p-5 sm:p-6 bg-[#0B192C] border-b border-[#1B3A60] flex items-center justify-between shrink-0">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${status.badge}`}>
                 {status.text}
               </span>
@@ -154,6 +154,14 @@ export default function ExplainableFeedbackModal({
               >
                 Confidence: {confidence}
               </span>
+              {evaluation.evaluatedBy === 'heuristic' && (
+                <span
+                  data-testid="offline-estimate-badge"
+                  className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-amber-500/15 text-amber-300 border-amber-500/30"
+                >
+                  Offline estimate (not AI-evaluated)
+                </span>
+              )}
             </div>
             <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
               Answer Assessment & Feedback

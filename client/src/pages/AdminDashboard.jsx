@@ -47,6 +47,38 @@ export const AdminDashboard = () => {
   const [recalibrating, setRecalibrating] = useState(false);
   const [recalibrationResult, setRecalibrationResult] = useState(null);
 
+  // Judge0 Service Health State
+  const [judge0Health, setJudge0Health] = useState(null);
+  const [loadingJudge0Health, setLoadingJudge0Health] = useState(false);
+
+  // AI & LLM Service Health State
+  const [aiHealth, setAiHealth] = useState(null);
+  const [loadingAiHealth, setLoadingAiHealth] = useState(false);
+
+  const fetchJudge0Health = async () => {
+    setLoadingJudge0Health(true);
+    try {
+      const res = await api.get('/health/judge0');
+      setJudge0Health(res.data?.data || null);
+    } catch (err) {
+      setJudge0Health(err.response?.data?.data || { status: 'DOWN', error: err.message, latencyMs: 0 });
+    } finally {
+      setLoadingJudge0Health(false);
+    }
+  };
+
+  const fetchAiHealth = async () => {
+    setLoadingAiHealth(true);
+    try {
+      const res = await api.get('/health/ai');
+      setAiHealth(res.data?.data || null);
+    } catch (err) {
+      setAiHealth(err.response?.data?.data || { status: 'DOWN', error: err.message, latencyMs: 0 });
+    } finally {
+      setLoadingAiHealth(false);
+    }
+  };
+
   // Fetch Approval Queue
   const fetchApprovalQueue = async () => {
     setLoadingQueue(true);
@@ -62,6 +94,8 @@ export const AdminDashboard = () => {
 
   useEffect(() => {
     fetchApprovalQueue();
+    fetchJudge0Health();
+    fetchAiHealth();
   }, []);
 
   const getDefaultQueue = () => [
@@ -167,12 +201,36 @@ export const AdminDashboard = () => {
   };
 
   const services = [
-    { name: 'Backend API & ML Engine', status: 'Online', latency: '4ms', details: 'Node.js 20 ES Modules' },
-    { name: 'MongoDB Database', status: 'Connected', latency: '1ms', details: 'MongoDB v7.0 (Local / Atlas)' },
-    { name: 'Gemini LLM Provider', status: 'Configured', latency: '650ms', details: 'gemini-1.5-flash / text-embedding-004' },
-    { name: 'Judge0 Sandbox Engine', status: 'Ready', latency: '12ms', details: 'REST Docker Engine port 2358' },
-    { name: 'Whisper STT Engine', status: 'Ready', latency: '320ms', details: 'OpenAI Whisper API' },
-    { name: 'Socket.io Cluster', status: 'Connected', latency: '2ms', details: 'Live IRT & Proctoring Websockets' }
+    { name: 'Backend API & ML Engine', status: 'Online', latency: '4ms', details: 'Node.js 20 ES Modules', isUp: true },
+    { name: 'MongoDB Database', status: 'Connected', latency: '1ms', details: 'MongoDB v7.0 (Local / Atlas)', isUp: true },
+    {
+      name: 'Gemini AI & Embeddings',
+      status: aiHealth
+        ? aiHealth.status === 'UP'
+          ? 'Online'
+          : aiHealth.status === 'DEGRADED'
+          ? 'Degraded (Heuristic Mode)'
+          : 'Unavailable'
+        : loadingAiHealth
+        ? 'Probing...'
+        : 'Ready',
+      latency: aiHealth?.latencyMs != null ? `${aiHealth.latencyMs}ms` : '0ms',
+      details: aiHealth
+        ? `${aiHealth.model || 'gemini-1.5-flash'} / ${aiHealth.embeddingModel || 'gemini-embedding-001'} (${aiHealth.provider || 'gemini'})${aiHealth.error ? ` - ${aiHealth.error}` : ''}`
+        : 'gemini-1.5-flash / gemini-embedding-001',
+      isUp: aiHealth ? aiHealth.status === 'UP' || aiHealth.status === 'DEGRADED' : true
+    },
+    {
+      name: 'Judge0 Sandbox Engine',
+      status: judge0Health ? (judge0Health.status === 'UP' ? 'Online' : 'Unavailable') : (loadingJudge0Health ? 'Probing...' : 'Ready'),
+      latency: judge0Health?.latencyMs ? `${judge0Health.latencyMs}ms` : '12ms',
+      details: judge0Health
+        ? `${judge0Health.backend === 'hosted' ? 'RapidAPI Hosted' : 'Self-Hosted Docker'} (${judge0Health.apiUrl || 'port 2358'})`
+        : 'REST Docker Engine port 2358',
+      isUp: judge0Health ? judge0Health.status === 'UP' : true
+    },
+    { name: 'Whisper STT Engine', status: 'Ready', latency: '320ms', details: 'OpenAI Whisper API', isUp: true },
+    { name: 'Socket.io Cluster', status: 'Connected', latency: '2ms', details: 'Live IRT & Proctoring Websockets', isUp: true }
   ];
 
   const difQuestions = [
@@ -596,10 +654,14 @@ export const AdminDashboard = () => {
               <div key={idx} className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 space-y-2 shadow-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{s.name}</span>
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  {s.isUp !== false ? (
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-400" />
+                  )}
                 </div>
                 <div className="text-xl font-bold text-white flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className={`w-2 h-2 rounded-full ${s.isUp !== false ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`}></span>
                   {s.status}
                 </div>
                 <div className="text-[11px] text-slate-500 flex justify-between">

@@ -118,11 +118,22 @@ export async function getProctoringFairnessMetrics() {
 
         const liveGenderTotals = { female: { total: 0, flagged: 0 }, male: { total: 0, flagged: 0 }, non_binary: { total: 0, flagged: 0 } };
         sessions.forEach((s) => {
+          // Strictly exclude demo/simulated sessions and events from algorithmic fairness statistics
+          if (s.isDemo || s.source === 'demo' || s.metadata?.source === 'demo') {
+            return;
+          }
+
           const demo = userDemoMap[String(s.candidateId || s.userId)];
           if (demo && liveGenderTotals[demo.gender]) {
             liveGenderTotals[demo.gender].total++;
             if (s.status === 'flagged' || s.integrityStatus === 'RED') {
-              liveGenderTotals[demo.gender].flagged++;
+              // Exclude sessions where the only infractions were simulated/demo events
+              const allDemoEvents =
+                s.proctorEvents?.length > 0 &&
+                s.proctorEvents.every((e) => e.source === 'demo' || e.metadata?.source === 'demo');
+              if (!allDemoEvents) {
+                liveGenderTotals[demo.gender].flagged++;
+              }
             }
           }
         });

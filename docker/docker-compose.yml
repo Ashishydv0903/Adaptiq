@@ -24,19 +24,18 @@ services:
     build:
       context: ../server
       dockerfile: Dockerfile
+      target: development
     container_name: adaptiq-server
     restart: unless-stopped
     ports:
       - "5000:5000"
+    env_file:
+      - ../server/.env
     environment:
       - NODE_ENV=development
       - PORT=5000
       - MONGO_URI=mongodb://mongo:27017/adaptiq
       - CLIENT_URL=http://localhost:5173
-      - JWT_SECRET=super_secure_jwt_secret_key_adaptiq_2026_dev_min_32_chars
-      - JWT_REFRESH_SECRET=super_secure_refresh_secret_key_adaptiq_2026_dev_min_32_chars
-      - LLM_PROVIDER=gemini
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - JUDGE0_API_URL=http://judge0-server:2358
     depends_on:
       - mongo
@@ -53,6 +52,7 @@ services:
     build:
       context: ../client
       dockerfile: Dockerfile
+      target: development
     container_name: adaptiq-client
     restart: unless-stopped
     ports:
@@ -69,27 +69,45 @@ services:
       - adaptiq-network
 
   # ==============================================================================
-  # Judge0 Code Execution Engine
+  # Judge0 Code Execution Engine (Profile: judge0)
+  # Run with: docker compose --profile judge0 up
   # ==============================================================================
   judge0-server:
     image: judge0/judge0:1.13.1
     container_name: adaptiq-judge0-server
     restart: always
+    privileged: true
     ports:
       - "2358:2358"
-    environment:
-      - REDIS_HOST=judge0-redis
-      - REDIS_PORT=6379
-      - POSTGRES_HOST=judge0-db
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=judge0
-      - POSTGRES_USER=judge0
-      - POSTGRES_PASSWORD=judge0_password
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    env_file:
+      - ./judge0.conf
     depends_on:
       - judge0-db
       - judge0-redis
     networks:
       - adaptiq-network
+    profiles:
+      - judge0
+
+  judge0-worker:
+    image: judge0/judge0:1.13.1
+    container_name: adaptiq-judge0-worker
+    restart: always
+    privileged: true
+    command: ["./scripts/workers"]
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+    env_file:
+      - ./judge0.conf
+    depends_on:
+      - judge0-db
+      - judge0-redis
+    networks:
+      - adaptiq-network
+    profiles:
+      - judge0
 
   judge0-db:
     image: postgres:15-alpine
@@ -103,15 +121,20 @@ services:
       - judge0_db_data:/var/lib/postgresql/data
     networks:
       - adaptiq-network
+    profiles:
+      - judge0
 
   judge0-redis:
     image: redis:7-alpine
     container_name: adaptiq-judge0-redis
     restart: always
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - judge0_redis_data:/data
     networks:
       - adaptiq-network
+    profiles:
+      - judge0
 
 volumes:
   mongo_data:

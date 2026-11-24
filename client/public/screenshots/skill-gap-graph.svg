@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B192C"/>
+      <stop offset="100%" stop-color="#07101B"/>
+    </linearGradient>
+    <linearGradient id="greenNode" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1B3A60"/>
+      <stop offset="100%" stop-color="#0F2238"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="750" fill="url(#bg4)"/>
+
+  <!-- Top Bar -->
+  <rect x="0" y="0" width="1200" height="60" fill="#07101B" stroke="#1B3A60" stroke-width="1"/>
+  <text x="35" y="37" fill="#FFFFFF" font-family="Outfit, Inter, sans-serif" font-weight="800" font-size="20">Skill-Gap Graph &amp; Topologically Ordered Roadmap</text>
+  <rect x="940" y="16" width="225" height="30" rx="15" fill="#52D68A" opacity="0.15" stroke="#52D68A" stroke-width="1"/>
+  <text x="955" y="36" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="12">Target: Senior Backend Engineer</text>
+
+  <!-- DAG Flow Canvas -->
+  <rect x="25" y="85" width="750" height="640" rx="18" fill="#07101B" stroke="#1B3A60" stroke-width="1.5"/>
+  <text x="50" y="125" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="12">PREREQUISITE DIRECTED ACYCLIC GRAPH (DAG)</text>
+
+  <!-- Edges -->
+  <line x1="200" y1="230" x2="380" y2="230" stroke="#52D68A" stroke-width="3"/>
+  <line x1="200" y1="230" x2="380" y2="430" stroke="#52D68A" stroke-width="3"/>
+  <line x1="380" y1="230" x2="560" y2="330" stroke="#F59E0B" stroke-width="3" stroke-dasharray="6"/>
+  <line x1="380" y1="430" x2="560" y2="330" stroke="#F59E0B" stroke-width="3" stroke-dasharray="6"/>
+  <line x1="560" y1="330" x2="680" y2="330" stroke="#F43F5E" stroke-width="3" stroke-dasharray="6"/>
+
+  <!-- Node 1: SQL Fundamentals (Mastered) -->
+  <rect x="80" y="195" width="160" height="70" rx="14" fill="#0F2238" stroke="#52D68A" stroke-width="2"/>
+  <circle cx="105" cy="230" r="12" fill="#52D68A"/>
+  <text x="100" y="235" fill="#07101B" font-family="Inter, sans-serif" font-weight="800" font-size="14">✓</text>
+  <text x="125" y="225" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="700" font-size="12">SQL Indexes</text>
+  <text x="125" y="245" fill="#86EFAC" font-family="Inter, sans-serif" font-size="10">Mastery: 92%</text>
+
+  <!-- Node 2: Database Concurrency (Mastered) -->
+  <rect x="300" y="195" width="160" height="70" rx="14" fill="#0F2238" stroke="#52D68A" stroke-width="2"/>
+  <circle cx="325" cy="230" r="12" fill="#52D68A"/>
+  <text x="320" y="235" fill="#07101B" font-family="Inter, sans-serif" font-weight="800" font-size="14">✓</text>
+  <text x="345" y="225" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="700" font-size="12">ACID &amp; Locks</text>
+  <text x="345" y="245" fill="#86EFAC" font-family="Inter, sans-serif" font-size="10">Mastery: 85%</text>
+
+  <!-- Node 3: Caching & Redis (In Progress) -->
+  <rect x="300" y="395" width="160" height="70" rx="14" fill="#0F2238" stroke="#F59E0B" stroke-width="2"/>
+  <circle cx="325" cy="430" r="12" fill="#F59E0B"/>
+  <text x="320" y="435" fill="#07101B" font-family="Inter, sans-serif" font-weight="800" font-size="14">⚡</text>
+  <text x="345" y="425" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="700" font-size="12">Redis Caching</text>
+  <text x="345" y="445" fill="#FCD34D" font-family="Inter, sans-serif" font-size="10">Target Gap: 64%</text>
+
+  <!-- Node 4: Distributed Locks (Skill Gap Identified) -->
+  <rect x="480" y="295" width="160" height="70" rx="14" fill="#0F2238" stroke="#F43F5E" stroke-width="2"/>
+  <circle cx="505" cy="330" r="12" fill="#F43F5E"/>
+  <text x="500" y="335" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="800" font-size="14">!</text>
+  <text x="525" y="325" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="700" font-size="12">Redlock Alg.</text>
+  <text x="525" y="345" fill="#FCA5A5" font-family="Inter, sans-serif" font-size="10">Prereq Unmet</text>
+
+  <!-- Right: Milestone Roadmap -->
+  <rect x="800" y="85" width="375" height="640" rx="18" fill="#0F2238" stroke="#1B3A60" stroke-width="1.5"/>
+  <text x="825" y="125" fill="#FFFFFF" font-family="Outfit, Inter, sans-serif" font-weight="700" font-size="18">Personalized Study Plan</text>
+  <text x="825" y="145" fill="#94A3B8" font-family="Inter, sans-serif" font-size="12">Topologically sorted to unblock dream role</text>
+
+  <!-- Step 1 -->
+  <rect x="825" y="170" width="325" height="110" rx="14" fill="#07101B" stroke="#F59E0B" stroke-width="1.2"/>
+  <text x="845" y="195" fill="#F59E0B" font-family="Inter, sans-serif" font-weight="700" font-size="12">Milestone 1 • High Priority</text>
+  <text x="845" y="220" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="700" font-size="14">Master Redis Cache Invalidation</text>
+  <text x="845" y="242" fill="#94A3B8" font-family="Inter, sans-serif" font-size="11">Estimated Time: 3 Hours • 2 Practice Scenarios</text>
+  <rect x="845" y="255" width="90" height="16" rx="8" fill="#1B3A60"/>
+  <text x="855" y="267" fill="#86EFAC" font-family="Inter, sans-serif" font-size="9">Unblocks Redlock</text>
+
+  <!-- Step 2 -->
+  <rect x="825" y="295" width="325" height="110" rx="14" fill="#07101B" stroke="#1B3A60" stroke-width="1"/>
+  <text x="845" y="320" fill="#38BDF8" font-family="Inter, sans-serif" font-weight="700" font-size="12">Milestone 2 • Next Up</text>
+  <text x="845" y="345" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="700" font-size="14">Distributed Consensus &amp; Raft</text>
+  <text x="845" y="367" fill="#94A3B8" font-family="Inter, sans-serif" font-size="11">Estimated Time: 5 Hours • Reading + Lab</text>
+</svg>

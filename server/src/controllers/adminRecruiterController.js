@@ -459,6 +459,62 @@ export const toggleLeaderboardOptIn = async (req, res, next) => {
   }
 };
 
+/**
+ * Admin: Create a new user with designated role (e.g. recruiter, candidate, admin)
+ * @route POST /api/users/admin/create-user
+ */
+export const createAdminUser = async (req, res, next) => {
+  try {
+    const { name, email, password, role = 'recruiter', demographicGroup = 'unspecified' } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email, and password are required'
+      });
+    }
+
+    if (!['candidate', 'recruiter', 'admin'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role specified'
+      });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'A user with this email already exists'
+      });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role,
+      demographicGroup
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          demographicGroup: user.demographicGroup
+        }
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   inviteCandidate,
   getRecruiterCandidates,
@@ -467,5 +523,6 @@ export default {
   approveQuestion,
   recalibrateIRT,
   getLeaderboard,
-  toggleLeaderboardOptIn
+  toggleLeaderboardOptIn,
+  createAdminUser
 };

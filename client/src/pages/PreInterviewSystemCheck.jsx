@@ -18,8 +18,11 @@ import {
 import { proctorAPI } from '../services/api.js';
 import { proctorConfigs } from '../config/proctorConfig.js';
 import { encryptFaceEmbedding } from '../utils/crypto.js';
-import AdaptiveAILogo from '../components/common/AdaptiveAILogo.jsx';
+import AdaptIQLogo from '../components/common/AdaptIQLogo.jsx';
 import MascotRobot from '../components/mascot/MascotRobot.jsx';
+import { initFaceLandmarker, detectFaceLandmarks } from '../services/vision/faceLandmarker.js';
+import { initObjectDetector } from '../services/vision/objectDetector.js';
+import { initFaceIdentity, enrol } from '../services/vision/faceIdentity.js';
 
 /**
  * PreInterviewSystemCheck Page
@@ -60,6 +63,39 @@ export const PreInterviewSystemCheck = () => {
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // AI Vision models loading state
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [modelsError, setModelsError] = useState('');
+
+  const loadVisionModels = useCallback(async () => {
+    setModelsLoading(true);
+    setModelsError('');
+    try {
+      await Promise.all([
+        initFaceLandmarker(),
+        initObjectDetector(),
+        initFaceIdentity()
+      ]);
+      setModelsLoaded(true);
+      return true;
+    } catch (err) {
+      console.error('Proctor vision models initialization error:', err);
+      const msg = `AI Proctoring models failed to load: ${err.message}. The interview cannot proceed without computer vision integrity models.`;
+      setModelsError(msg);
+      setErrorMessage(msg);
+      setModelsLoaded(false);
+      return false;
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
+  // Pre-load vision models in background on mount
+  useEffect(() => {
+    loadVisionModels();
+  }, [loadVisionModels]);
 
   // Media references
   const videoRef = useRef(null);
@@ -242,20 +278,31 @@ export const PreInterviewSystemCheck = () => {
     }
 
     const avgLuminance = count > 0 ? Math.round(totalLuminance / count) : 0;
-    const skinRatio = count > 0 ? skinPixelCount / count : 0;
     setLuminanceValue(avgLuminance);
 
     const isLightOk =
       avgLuminance >= (proctorConfigs.thresholds.lighting?.minLuminance || 35) &&
       avgLuminance <= (proctorConfigs.thresholds.lighting?.maxLuminance || 240);
 
-    // Face is only verified present if ambient light is sufficient and skin chromaticity ratio passes
-    const isFacePresent = isLightOk && skinRatio >= 0.035;
+    // Real Face Detection via MediaPipe FaceLandmarker
+    let isSingleFace = false;
+    try {
+      if (modelsLoaded) {
+        const landmarkRes = detectFaceLandmarks(video);
+        isSingleFace = landmarkRes.faceCount === 1;
+      } else {
+        // Fallback lighting presence until model finishes loading
+        const skinRatio = count > 0 ? skinPixelCount / count : 0;
+        isSingleFace = skinRatio >= 0.035;
+      }
+    } catch (e) {
+      // Model not yet ready or frame error
+    }
 
     setChecks((prev) => ({
       ...prev,
       lighting: isLightOk,
-      singleFace: isFacePresent
+      singleFace: isSingleFace
     }));
   };
 
@@ -264,8 +311,12 @@ export const PreInterviewSystemCheck = () => {
   // ----------------------------------------------------------------
   const runThreeFrameEnrolment = async () => {
     if (!videoRef.current || !checks.permissions) return;
-    if (!checks.lighting || !checks.singleFace) {
-      setErrorMessage('Cannot complete face enrolment: Camera is covered/dark or no person is detected in frame.');
+    if (!modelsLoaded) {
+      const ok = await loadVisionModels();
+      if (!ok) return;
+    }
+    if (!checks.lighting) {
+      setErrorMessage('Cannot complete face enrolment: Camera is covered/dark or ambient lighting is improper.');
       return;
     }
     setIsEnrolling(true);
@@ -282,29 +333,27 @@ export const PreInterviewSystemCheck = () => {
       // Frame 1: Center
       await new Promise((r) => setTimeout(r, 600));
       ctx.drawImage(videoRef.current, 0, 0, 320, 240);
-      capturedFrames.push(canvas.toDataURL('image/jpeg', 0.6));
+      capturedFrames.push(canvas.toDataURL('image/jpeg', 0.8));
       setEnrolmentProgress(1);
 
       // Frame 2: Micro-sampling 2
       await new Promise((r) => setTimeout(r, 600));
       ctx.drawImage(videoRef.current, 0, 0, 320, 240);
-      capturedFrames.push(canvas.toDataURL('image/jpeg', 0.6));
+      capturedFrames.push(canvas.toDataURL('image/jpeg', 0.8));
       setEnrolmentProgress(2);
 
       // Frame 3: Micro-sampling 3
       await new Promise((r) => setTimeout(r, 600));
       ctx.drawImage(videoRef.current, 0, 0, 320, 240);
-      capturedFrames.push(canvas.toDataURL('image/jpeg', 0.6));
+      capturedFrames.push(canvas.toDataURL('image/jpeg', 0.8));
       setEnrolmentProgress(3);
 
-      // Generate a canonical 128-d face embedding vector
-      const synthetic128dEmbedding = Array.from({ length: 128 }, (_, i) => {
-        const seed = Math.sin((i + 1) * 999) * 0.5;
-        return Number((seed + 0.5).toFixed(4));
-      });
+      // REAL 128-d face embedding computation using @vladmandic/face-api
+      // Rejects if 0 or >1 face is found in any frame!
+      const real128dEmbedding = await enrol(capturedFrames);
 
       // Encrypt the biometric embedding using WebCrypto AES-GCM
-      const encryptedPayload = await encryptFaceEmbedding(synthetic128dEmbedding);
+      const encryptedPayload = await encryptFaceEmbedding(real128dEmbedding);
 
       // Save encrypted enrolment to backend
       await proctorAPI.enrolBiometrics(sessionId, {
@@ -318,13 +367,15 @@ export const PreInterviewSystemCheck = () => {
       });
 
       // Save reference embedding in session storage for live proctor comparison
-      sessionStorage.setItem('adaptiq_proctor_ref_emb', JSON.stringify(synthetic128dEmbedding));
+      sessionStorage.setItem('adaptiq_proctor_ref_emb', JSON.stringify(real128dEmbedding));
 
       setEnrolmentFrames(capturedFrames);
-      setChecks((prev) => ({ ...prev, enrolment: true }));
+      setChecks((prev) => ({ ...prev, enrolment: true, singleFace: true }));
     } catch (err) {
       console.error('Enrolment error:', err);
-      setErrorMessage('Face biometric enrolment failed. Please try again.');
+      setErrorMessage(
+        err.message || 'Face biometric enrolment failed. Please ensure exactly one face is clearly visible and try again.'
+      );
       setChecks((prev) => ({ ...prev, enrolment: false }));
     } finally {
       setIsEnrolling(false);
@@ -355,10 +406,20 @@ export const PreInterviewSystemCheck = () => {
     checks.singleFace &&
     checks.enrolment &&
     checks.micLevel &&
-    checks.fullscreen;
+    checks.fullscreen &&
+    modelsLoaded &&
+    !modelsError;
 
   const handleStartInterview = () => {
     setErrorMessage('');
+
+    // Fail loudly if models are not loaded
+    if (!modelsLoaded || modelsError) {
+      setErrorMessage(
+        'Interview cannot start: AI proctoring computer vision models are not loaded. Please ensure models are available and click "Retry Loading Models".'
+      );
+      return;
+    }
 
     // Ensure camera & mic are permitted
     if (!checks.permissions) {
@@ -426,7 +487,7 @@ export const PreInterviewSystemCheck = () => {
       <div className="min-h-screen bg-[#071322] text-white flex flex-col items-center justify-center p-4 sm:p-6 font-sans">
         <div className="w-full max-w-2xl bg-[#0B192C] border border-[#1B3A60] rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6">
           <div className="flex items-center gap-3">
-            <AdaptiveAILogo className="w-9 h-9" />
+            <AdaptIQLogo className="w-9 h-9" />
             <div>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
                 AI Proctoring Consent
@@ -440,7 +501,7 @@ export const PreInterviewSystemCheck = () => {
           <div className="p-4 rounded-2xl bg-[#0F2238] border border-[#1B3A60] text-sm text-slate-300 space-y-3 leading-relaxed">
             <p>
               To uphold assessment integrity and fair evaluation standards,{' '}
-              <strong className="text-white">Adaptive AI</strong> requires automated proctoring during your
+              <strong className="text-white">AdaptIQ</strong> requires automated proctoring during your
               interview session. By proceeding, you acknowledge and agree to:
             </p>
             <ul className="space-y-2 list-disc list-inside text-xs sm:text-sm text-slate-300">
@@ -507,7 +568,7 @@ export const PreInterviewSystemCheck = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0B192C] border border-[#1B3A60] rounded-2xl p-5">
           <div className="flex items-center gap-3">
-            <AdaptiveAILogo className="w-8 h-8" />
+            <AdaptIQLogo className="w-8 h-8" />
             <div>
               <h1 className="text-lg sm:text-xl font-black text-white tracking-tight">
                 Pre-Interview System Check & Enrolment
@@ -539,7 +600,28 @@ export const PreInterviewSystemCheck = () => {
           </div>
         </div>
 
-        {errorMessage && (
+        {modelsError && (
+          <div className="p-4 bg-rose-950/80 border border-rose-500 rounded-2xl flex items-start justify-between gap-3 shadow-lg">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-rose-200">Vision Models Loading Error</p>
+                <p className="text-xs text-rose-300 mt-0.5">{modelsError}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={loadVisionModels}
+              disabled={modelsLoading}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow transition shrink-0 flex items-center gap-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${modelsLoading ? 'animate-spin' : ''}`} />
+              {modelsLoading ? 'Loading...' : 'Retry Models'}
+            </button>
+          </div>
+        )}
+
+        {errorMessage && errorMessage !== modelsError && (
           <div className="p-3 bg-red-950/70 border border-red-500/50 rounded-xl text-xs text-red-200 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{errorMessage}</span>

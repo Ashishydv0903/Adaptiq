@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, getDashboardPathForRole } from '../context/AuthContext';
-import { AdaptiveAILogo } from '../components/common/AdaptiveAILogo';
+import { AdaptIQLogo } from '../components/common/AdaptIQLogo';
 import { LogIn, Key, Mail, Sparkles, AlertCircle } from 'lucide-react';
 
 export const LoginPage = () => {
@@ -42,9 +42,9 @@ export const LoginPage = () => {
         {/* Header */}
         <div className="text-center">
           <div className="inline-flex p-3 rounded-2xl bg-[#52D68A]/10 text-[#52D68A] mb-4 border border-[#52D68A]/20">
-            <AdaptiveAILogo size={36} iconColor="#52D68A" eyeColor="#0F2238" />
+            <AdaptIQLogo size={36} iconColor="#52D68A" eyeColor="#0F2238" />
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Welcome to Adaptive AI</h2>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Welcome to AdaptIQ</h2>
           <p className="text-sm text-slate-300 mt-1">
             Sign in to start your mock interviews and view your study roadmap.
           </p>
@@ -68,6 +68,7 @@ export const LoginPage = () => {
               <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="email"
+                name="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -85,6 +86,7 @@ export const LoginPage = () => {
               <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="password"
+                name="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -109,35 +111,37 @@ export const LoginPage = () => {
           </button>
         </form>
 
-        {/* Quick Demo Logins */}
-        <div className="border-t border-[#1B3A60] pt-5">
-          <div className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#52D68A]" /> Quick Demo Logins
+        {/* Quick Demo Logins (Visible only in development) */}
+        {import.meta.env.DEV && (
+          <div className="border-t border-[#1B3A60] pt-5">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#52D68A]" /> Quick Demo Logins
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDemoFill('candidate@adaptiq.ai', 'Candidate@123456')}
+                className="py-1.5 px-2 bg-[#0B192C] hover:bg-[#1B3A60] border border-[#1B3A60] hover:border-[#52D68A] rounded-lg text-xs font-semibold text-[#52D68A] transition-all text-center"
+              >
+                Candidate
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoFill('recruiter@adaptiq.ai', 'Recruiter@123456')}
+                className="py-1.5 px-2 bg-[#0B192C] hover:bg-[#1B3A60] border border-[#1B3A60] hover:border-amber-400 rounded-lg text-xs font-semibold text-amber-300 transition-all text-center"
+              >
+                Recruiter
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoFill('admin@adaptiq.ai', 'Admin@123456')}
+                className="py-1.5 px-2 bg-[#0B192C] hover:bg-[#1B3A60] border border-[#1B3A60] hover:border-rose-400 rounded-lg text-xs font-semibold text-rose-300 transition-all text-center"
+              >
+                Admin
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => handleDemoFill('candidate@adaptiq.ai', 'Candidate@123456')}
-              className="py-1.5 px-2 bg-[#0B192C] hover:bg-[#1B3A60] border border-[#1B3A60] hover:border-[#52D68A] rounded-lg text-xs font-semibold text-[#52D68A] transition-all text-center"
-            >
-              Candidate
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemoFill('recruiter@adaptiq.ai', 'Recruiter@123456')}
-              className="py-1.5 px-2 bg-[#0B192C] hover:bg-[#1B3A60] border border-[#1B3A60] hover:border-amber-400 rounded-lg text-xs font-semibold text-amber-300 transition-all text-center"
-            >
-              Recruiter
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemoFill('admin@adaptiq.ai', 'Admin@123456')}
-              className="py-1.5 px-2 bg-[#0B192C] hover:bg-[#1B3A60] border border-[#1B3A60] hover:border-rose-400 rounded-lg text-xs font-semibold text-rose-300 transition-all text-center"
-            >
-              Admin
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-400">

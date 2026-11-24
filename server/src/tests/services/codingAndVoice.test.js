@@ -4,6 +4,8 @@
  * Whisper transcription, speech delivery metrics (WPM, filler words, pause ratio).
  */
 
+import nock from 'nock';
+import { env } from '../../config/env.js';
 import {
   normalizeLanguage,
   executeJudge0Submission,
@@ -21,6 +23,16 @@ import { transcribeAudioBuffer } from '../../services/speech/whisperService.js';
 describe('Coding Round & Voice Mode Engine', () => {
   // 1. JUDGE0 EXECUTION & TEST CASES
   describe('Judge0 Multi-Language Execution & Test Cases', () => {
+    const JUDGE0_BASE_URL = env.JUDGE0_API_URL || 'http://localhost:2358';
+
+    beforeEach(() => {
+      nock.cleanAll();
+    });
+
+    afterEach(() => {
+      nock.cleanAll();
+    });
+
     test('normalizeLanguage maps language aliases correctly', () => {
       expect(normalizeLanguage('js')).toBe('javascript');
       expect(normalizeLanguage('py')).toBe('python');
@@ -29,6 +41,16 @@ describe('Coding Round & Voice Mode Engine', () => {
     });
 
     test('executeJudge0Submission runs JavaScript code and captures stdout & runtime', async () => {
+      nock(JUDGE0_BASE_URL)
+        .post('/submissions?base64_encoded=false&wait=true')
+        .reply(200, {
+          status: { id: 3, description: 'Accepted' },
+          stdout: '10\n',
+          stderr: null,
+          time: '0.015',
+          memory: 10240
+        });
+
       const code = `
         function solution(a, b) {
           return a + b;
@@ -60,6 +82,18 @@ describe('Coding Round & Voice Mode Engine', () => {
         { input: '[1, 2, 3, 4, 5]', expectedOutput: '5', isHidden: true }
       ];
 
+      for (const tc of testCases.filter((t) => !t.isHidden)) {
+        nock(JUDGE0_BASE_URL)
+          .post('/submissions?base64_encoded=false&wait=true')
+          .reply(200, {
+            status: { id: 3, description: 'Accepted' },
+            stdout: `${tc.expectedOutput}\n`,
+            stderr: null,
+            time: '0.015',
+            memory: 10240
+          });
+      }
+
       const res = await executeAllTestCases({
         sourceCode: code,
         language: 'javascript',
@@ -83,6 +117,18 @@ describe('Coding Round & Voice Mode Engine', () => {
         { input: '5', expectedOutput: '10', isHidden: false },
         { input: '100', expectedOutput: '200', isHidden: true }
       ];
+
+      for (const tc of testCases) {
+        nock(JUDGE0_BASE_URL)
+          .post('/submissions?base64_encoded=false&wait=true')
+          .reply(200, {
+            status: { id: 3, description: 'Accepted' },
+            stdout: `${tc.expectedOutput}\n`,
+            stderr: null,
+            time: '0.015',
+            memory: 10240
+          });
+      }
 
       const res = await executeAllTestCases({
         sourceCode: code,

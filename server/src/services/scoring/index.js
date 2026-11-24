@@ -128,13 +128,21 @@ export async function executeScoringPipeline({
     conceptResult.concepts
   );
 
+  const isHeuristic =
+    rubricResult.evaluatedBy === 'heuristic' ||
+    rubricResult.isHeuristic === true ||
+    conceptResult.isHeuristic === true;
+  const evaluatedBy = isHeuristic ? 'heuristic' : 'llm';
+
   return {
     score: finalScore,
     rawScore,
     integrityMultiplier: integrity.multiplier,
     penalties: integrity.penalties,
-    model,
-    promptVersion: RUBRIC_PROMPT_VERSION,
+    model: isHeuristic ? 'local-heuristic-ridge' : model,
+    evaluatedBy,
+    isHeuristic,
+    promptVersion: rubricResult.promptVersion || RUBRIC_PROMPT_VERSION,
     rubric: {
       scores: rubricResult.rubricScores,
       details: rubricResult.dimensionDetails,

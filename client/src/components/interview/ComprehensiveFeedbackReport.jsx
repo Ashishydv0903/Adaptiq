@@ -238,8 +238,20 @@ export const ComprehensiveFeedbackReport = ({
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#1B3A60] relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-[#52D68A]/15 text-[#52D68A] border border-[#52D68A]/30 mb-1">
-              <Sparkles className="w-4 h-4 text-[#52D68A]" /> 30-Second Candidate Summary
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-[#52D68A]/15 text-[#52D68A] border border-[#52D68A]/30">
+                <Sparkles className="w-4 h-4 text-[#52D68A]" /> 30-Second Candidate Summary
+              </div>
+              {(feedbackData.evaluatedBy === 'heuristic' ||
+                feedbackData.isHeuristic === true ||
+                feedbackData.hasHeuristicEvaluations === true) && (
+                <span
+                  data-testid="session-offline-badge"
+                  className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                >
+                  Offline estimate (not AI-evaluated)
+                </span>
+              )}
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
               Interview Scorecard & Feedback

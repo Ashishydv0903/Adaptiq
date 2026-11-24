@@ -1,154 +1,11 @@
 /**
  * @file Proctoring Configuration & Escalation Rules Engine (Client)
- * Configurable thresholds for AI proctoring, event severities, and multi-strike escalation.
+ * Sourced from shared canonical proctorConfig.json.
  */
 
-export const proctorConfigs = {
-  consentVersion: '1.0.0',
-  samplingIntervalMs: 500, // Web worker checks frame every ~500ms
+import rawConfig from './proctorConfig.json';
 
-  // Escalation rules
-  escalation: {
-    yellowsToOrange: 3, // 3 yellow infractions escalate to orange
-    orangesToRed: 3     // 3 oranges become a red
-  },
-
-  // Environmental & biometric thresholds
-  thresholds: {
-    lighting: {
-      minLuminance: 40,   // Below this is camera blocked / too dark
-      maxLuminance: 235   // Above this is overexposed
-    },
-    headPose: {
-      maxYawDeg: 25,      // Head turn left/right > 25°
-      maxPitchDeg: 20     // Head tilt up/down > 20°
-    },
-    iris: {
-      maxGazeDeviation: 0.28 // Gaze deviation from screen center
-    },
-    durations: {
-      lookingAwayYellowMs: 1500,
-      lookingAwayOrangeMs: 3500,
-      noFaceYellowMs: 1200,
-      noFaceOrangeMs: 3000
-    },
-    identity: {
-      maxEmbeddingDistance: 0.42 // Euclidean distance threshold for 128-d face embedding
-    },
-    prohibitedObjects: [
-      'cell phone',
-      'mobile phone',
-      'phone',
-      'book',
-      'laptop',
-      'tablet'
-    ],
-    // Browser behaviour thresholds
-    browser: {
-      largePasteChars: 80,
-      virtualCameraKeywords: [
-        'obs',
-        'virtual',
-        'manycam',
-        'v4l2loopback',
-        'droidcam',
-        'fake',
-        'camo',
-        'xsplit',
-        'ndi'
-      ],
-      devtoolsKeys: ['f12', 'i', 'j', 'c', 'u']
-    },
-    // Typing pattern anomaly thresholds
-    typing: {
-      minKeystrokesForIkiAnalysis: 15,
-      uniformIkiStdDevMs: 12, // Inter-keystroke interval std dev < 12ms indicates bot/synthetic injection
-      maxHumanWpm: 190,
-      fastAnswerMinChars: 100,
-      fastAnswerMaxSeconds: 3
-    },
-    // Audio analysis thresholds (Web Audio API)
-    audio: {
-      speechThresholdRatio: 0.16,
-      silentNoiseFloorRatio: 0.04,
-      twoSpeakerFormantVarianceThreshold: 0.35,
-      writeModeSpeechDurationMs: 1200
-    },
-    // Time-decay parameters
-    timeDecay: {
-      halfLifeMinutes: 15, // Penalties decay with a 15-minute half-life
-      initialScore: 100
-    }
-  },
-
-  // Base severities for proctoring event types
-  baseSeverityMap: {
-    // Face & vision
-    LOOKING_AWAY: 'yellow',
-    NO_FACE: 'yellow',
-    MULTIPLE_FACES: 'orange',
-    IDENTITY_MISMATCH: 'red',
-    PROHIBITED_OBJECT: 'orange',
-    CAMERA_BLOCKED_DARK: 'orange',
-    DEVICE_DISCONNECTED: 'orange',
-
-    // Browser behaviour
-    TAB_SWITCH: 'yellow',
-    WINDOW_BLUR: 'yellow',
-    FULLSCREEN_EXIT: 'orange',
-    CLIPBOARD_ACTION: 'yellow',
-    RIGHT_CLICK: 'yellow',
-    DEVTOOLS_SHORTCUT: 'orange',
-    WINDOW_RESIZE_EXTRA_MONITOR: 'orange',
-    VIRTUAL_CAMERA: 'orange',
-
-    // Typing pattern anomalies
-    TYPING_ANOMALY_LARGE_PASTE: 'orange',
-    TYPING_ANOMALY_UNIFORM_KEYSTROKES: 'orange',
-    IMPLAUSIBLY_FAST_ANSWER: 'orange',
-
-    // AI-generated text risk indicator (labelled as risk indicator only)
-    AI_TEXT_RISK_INDICATOR: 'orange',
-
-    // Web Audio API checks
-    SPEECH_IN_WRITE_MODE: 'yellow',
-    LIPS_MOVING_NO_AUDIO: 'yellow',
-    TWO_SPEAKER_HEURISTIC: 'orange'
-  }
-};
-
-/**
- * Base point deductions per severity level for integrity score calculation
- */
-export const SEVERITY_BASE_DEDUCTIONS = {
-  yellow: 3,
-  orange: 10,
-  red: 25
-};
-
-/**
- * Event-specific base deductions (overrides default severity base when specified)
- */
-export const EVENT_BASE_DEDUCTIONS = {
-  TAB_SWITCH: 3,
-  WINDOW_BLUR: 3,
-  RIGHT_CLICK: 2,
-  CLIPBOARD_ACTION: 3,
-  SPEECH_IN_WRITE_MODE: 4,
-  LIPS_MOVING_NO_AUDIO: 4,
-  FULLSCREEN_EXIT: 8,
-  MULTIPLE_FACES: 10,
-  PROHIBITED_OBJECT: 10,
-  DEVTOOLS_SHORTCUT: 12,
-  WINDOW_RESIZE_EXTRA_MONITOR: 8,
-  VIRTUAL_CAMERA: 15,
-  TYPING_ANOMALY_LARGE_PASTE: 10,
-  TYPING_ANOMALY_UNIFORM_KEYSTROKES: 12,
-  IMPLAUSIBLY_FAST_ANSWER: 12,
-  AI_TEXT_RISK_INDICATOR: 10,
-  TWO_SPEAKER_HEURISTIC: 12,
-  IDENTITY_MISMATCH: 35
-};
+export const { proctorConfigs, SEVERITY_BASE_DEDUCTIONS, EVENT_BASE_DEDUCTIONS } = rawConfig;
 
 /**
  * Computes a time-decayed integrity score (0-100) per session and assigns integrityStatus.
@@ -228,11 +85,23 @@ export function evaluateSeverityAndEscalation(eventHistory = [], currentEvent = 
   let initialSeverity = currentEvent.severity || baseSeverityMap[eventType] || 'yellow';
 
   // Specific duration-based severity adjustments
-  if (eventType === 'LOOKING_AWAY' && (currentEvent.durationMs || 0) >= configs.thresholds.durations.lookingAwayOrangeMs) {
-    initialSeverity = 'orange';
+  if (eventType === 'LOOKING_AWAY') {
+    initialSeverity =
+      (currentEvent.durationMs || 0) >= (configs.thresholds?.durations?.lookingAwayOrangeMs || 3500)
+        ? 'orange'
+        : 'yellow';
   }
-  if (eventType === 'NO_FACE' && (currentEvent.durationMs || 0) >= configs.thresholds.durations.noFaceOrangeMs) {
-    initialSeverity = 'orange';
+  if (eventType === 'NO_FACE') {
+    const dur = currentEvent.durationMs || 0;
+    const redMs = configs.thresholds?.durations?.noFaceRedMs || 6000;
+    const orangeMs = configs.thresholds?.durations?.noFaceOrangeMs || 3000;
+    if (dur >= redMs) {
+      initialSeverity = 'red';
+    } else if (dur >= orangeMs) {
+      initialSeverity = 'orange';
+    } else {
+      initialSeverity = 'yellow';
+    }
   }
 
   // Count past active infractions

@@ -10,6 +10,19 @@ export const PROMPT_VERSIONS = {
 };
 
 /**
+ * Typed Error for when the LLM service is offline, unconfigured, or unreachable
+ */
+export class LLMUnavailableError extends Error {
+  constructor(message = 'LLM service is currently unavailable', details = {}) {
+    super(message);
+    this.name = 'LLMUnavailableError';
+    this.code = 'LLM_UNAVAILABLE';
+    this.statusCode = 503;
+    this.details = details;
+  }
+}
+
+/**
  * Initializes Gemini client if API key is configured
  */
 const getGeminiClient = () => {
@@ -430,9 +443,18 @@ export async function generateText(prompt, options = {}) {
   const modelName = options.model || env.GEMINI_MODEL || 'gemini-1.5-flash';
   const genAI = getGeminiClient();
 
-  if (!genAI) {
-    logger.debug('[LLM] No GEMINI_API_KEY present; using deterministic fallback');
-    return generateDeterministicFallback(prompt);
+  if (!genAI || !env.GEMINI_API_KEY) {
+    if (
+      process.env.NODE_ENV === 'test' &&
+      !options.simulateUnavailable &&
+      process.env.SIMULATE_LLM_DOWN !== 'true'
+    ) {
+      logger.debug('[LLM] No GEMINI_API_KEY present (test mode); using deterministic fallback');
+      return generateDeterministicFallback(prompt);
+    }
+    throw new LLMUnavailableError(
+      'GEMINI_API_KEY is not configured. Real LLM completion is unavailable.'
+    );
   }
 
   try {
@@ -449,8 +471,21 @@ export async function generateText(prompt, options = {}) {
     const response = await result.response;
     return response.text();
   } catch (error) {
-    logger.warn(`[LLM] API call failed (${error.message}); falling back to deterministic response`);
-    return generateDeterministicFallback(prompt);
+    if (error instanceof LLMUnavailableError) {
+      throw error;
+    }
+    if (
+      process.env.NODE_ENV === 'test' &&
+      !options.simulateUnavailable &&
+      process.env.SIMULATE_LLM_DOWN !== 'true'
+    ) {
+      logger.warn(`[LLM] API call failed (${error.message}); falling back to deterministic response in test mode`);
+      return generateDeterministicFallback(prompt);
+    }
+    logger.error(`[LLM] API call failed: ${error.message}`);
+    throw new LLMUnavailableError(`LLM API call failed: ${error.message}`, {
+      originalError: error.message
+    });
   }
 }
 
@@ -527,6 +562,10 @@ Fix all formatting and field types, and return ONLY the corrected valid JSON:`;
       raw: retryText
     };
   } catch (err) {
+    if (err instanceof LLMUnavailableError || err.name === 'LLMUnavailableError') {
+      throw err;
+    }
+
     logger.error(`[LLM] Structured JSON failed after retry: ${err.message}`);
 
     // If options has fallback data, return it
@@ -546,15 +585,20 @@ Fix all formatting and field types, and return ONLY the corrected valid JSON:`;
 
 /**
  * Computes semantic embedding vector.
- * Uses Gemini text-embedding-004 when API key is available,
- * otherwise generates a deterministic normalized bag-of-words / character n-gram vector.
+ * Uses Gemini gemini-embedding-001 (or configured GEMINI_EMBEDDING_MODEL) when API key is available,
+ * otherwise generates a deterministic normalized local embedding vector.
  *
  * @param {string} text
- * @returns {Promise<number[]>} Normalized unit embedding vector
+ * @returns {Promise<number[]>} Normalized unit embedding vector with model and dimension metadata
  */
 export async function generateEmbedding(text) {
+  const targetModel = env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
+
   if (!text || typeof text !== 'string') {
-    return new Array(64).fill(0);
+    const emptyVec = new Array(64).fill(0);
+    emptyVec.model = 'local-deterministic-64';
+    emptyVec.dimension = 64;
+    return emptyVec;
   }
 
   const genAI = getGeminiClient();
@@ -562,19 +606,110 @@ export async function generateEmbedding(text) {
   if (genAI && env.GEMINI_API_KEY) {
     try {
       const model = genAI.getGenerativeModel({
-        model: env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004'
+        model: targetModel
       });
       const result = await model.embedContent(text);
       if (result && result.embedding && Array.isArray(result.embedding.values)) {
-        return result.embedding.values;
+        const values = result.embedding.values;
+        values.model = targetModel;
+        values.dimension = values.length;
+        return values;
       }
     } catch (err) {
       logger.warn(`[LLM] Embedding API call failed: ${err.message}. Using deterministic local embedding vector.`);
+      if (
+        process.env.NODE_ENV !== 'test' &&
+        (process.env.SIMULATE_LLM_DOWN === 'true' || options?.simulateUnavailable)
+      ) {
+        throw new LLMUnavailableError(`Embedding API call failed: ${err.message}`);
+      }
     }
   }
 
   // Deterministic local feature embedding vector (64 dimensions)
-  return computeLocalDeterministicEmbedding(text, 64);
+  const localVec = computeLocalDeterministicEmbedding(text, 64);
+  localVec.model = 'local-deterministic-64';
+  localVec.dimension = 64;
+  return localVec;
+}
+
+/**
+ * Returns embedding vector wrapped in metadata object
+ *
+ * @param {string} text
+ * @returns {Promise<{ vector: number[], model: string, dimension: number, updatedAt: Date }>}
+ */
+export async function generateEmbeddingWithMetadata(text) {
+  const vector = await generateEmbedding(text);
+  const model =
+    vector.model ||
+    (env.GEMINI_API_KEY
+      ? env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001'
+      : 'local-deterministic-64');
+  return {
+    vector,
+    model,
+    dimension: vector.length,
+    updatedAt: new Date()
+  };
+}
+
+/**
+ * Health check probe for AI / LLM subsystem
+ * Makes a minimal test generation call and measures latency
+ *
+ * @returns {Promise<Object>} Health status, latency, provider, and model information
+ */
+export async function checkAIHealth() {
+  const provider = env.LLM_PROVIDER || 'gemini';
+  const model = env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const embeddingModel = env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
+
+  if (!env.GEMINI_API_KEY) {
+    return {
+      status: 'DEGRADED',
+      online: false,
+      provider,
+      model,
+      embeddingModel,
+      latencyMs: 0,
+      message: 'AI scoring will use the heuristic scorer (no GEMINI_API_KEY configured)'
+    };
+  }
+
+  const startTime = Date.now();
+  try {
+    const genAI = getGeminiClient();
+    const geminiModel = genAI.getGenerativeModel({
+      model,
+      generationConfig: { maxOutputTokens: 5 }
+    });
+    const result = await geminiModel.generateContent('ping');
+    await result.response;
+    const latencyMs = Date.now() - startTime;
+
+    return {
+      status: 'UP',
+      online: true,
+      provider,
+      model,
+      embeddingModel,
+      latencyMs,
+      message: 'AI service healthy and operational'
+    };
+  } catch (err) {
+    const latencyMs = Date.now() - startTime;
+    return {
+      status: 'DOWN',
+      online: false,
+      provider,
+      model,
+      embeddingModel,
+      latencyMs,
+      error: err.message,
+      message: `AI service unavailable: ${err.message}`
+    };
+  }
 }
 
 /**
@@ -634,7 +769,10 @@ export default {
   generateText,
   generateStructuredJson,
   generateEmbedding,
+  generateEmbeddingWithMetadata,
   computeLocalDeterministicEmbedding,
   extractJsonFromText,
+  checkAIHealth,
+  LLMUnavailableError,
   PROMPT_VERSIONS
 };

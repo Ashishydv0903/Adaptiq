@@ -38,8 +38,33 @@ export function calculateEvaluationConfidence({
   wordCount = 40,
   semanticSimilarity = 0.8,
   integrityScore = 100,
-  isCoding = false
+  isCoding = false,
+  evaluatedBy = 'llm'
 }) {
+  // If evaluated by heuristic offline scorer, confidence is strictly capped at 0.4
+  if (evaluatedBy === 'heuristic') {
+    const rawHeuristic = Math.min(
+      0.40,
+      Math.max(0.20, (wordCount / 50) * 0.30 + (semanticSimilarity || 0.5) * 0.15)
+    );
+    const finalConfidence = Number(rawHeuristic.toFixed(2));
+    const confidencePercentage = Math.round(finalConfidence * 100);
+
+    return {
+      confidenceScore: finalConfidence,
+      confidencePercentage,
+      confidenceLevel: 'LOW',
+      shouldFlagForHumanReview: true,
+      flagReason:
+        'Offline heuristic estimate (not AI-evaluated) - low confidence assessment queued for human review',
+      evaluatedBy: 'heuristic',
+      factors: {
+        heuristicScorer: true,
+        confidenceCap: 0.40
+      }
+    };
+  }
+
   // If deterministic code execution passed with test cases, baseline confidence is high
   if (isCoding) {
     const codeConfidence = integrityScore < 75 ? 0.72 : 0.95;
@@ -99,6 +124,7 @@ export function calculateEvaluationConfidence({
     confidenceLevel,
     shouldFlagForHumanReview,
     flagReason,
+    evaluatedBy: 'llm',
     factors: {
       varianceFactor: Number(varianceFactor.toFixed(2)),
       coverageFactor: Number(coverageFactor.toFixed(2)),

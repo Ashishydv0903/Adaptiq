@@ -14,6 +14,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { proctorConfigs, calculateTimeDecayedIntegrityScore } from '../config/proctorConfig.js';
 import { proctorAPI, sessionAPI } from '../services/api.js';
 import SimplePeer from '../services/simplePeer.js';
+import { initFaceLandmarker, detectFaceLandmarks } from '../services/vision/faceLandmarker.js';
+import { initObjectDetector, detectProhibitedObjects } from '../services/vision/objectDetector.js';
+import { initFaceIdentity, verify } from '../services/vision/faceIdentity.js';
 
 export function useProctor({
   videoRef,
@@ -25,6 +28,10 @@ export function useProctor({
   onWarning = null
 }) {
   const [isRunning, setIsRunning] = useState(false);
+  const [isModelsLoading, setIsModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState(null);
+  const [isLowPerformanceMode, setIsLowPerformanceMode] = useState(false);
+  const isLowPerformanceModeRef = useRef(false);
   const [latestWarning, setLatestWarning] = useState(null);
   const [warnings, setWarnings] = useState([]);
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
@@ -86,6 +93,37 @@ export function useProctor({
   const keystrokeTimestampsRef = useRef([]);
   const lastKeystrokeEvalRef = useRef(0);
 
+  // Vision loop references
+  const lastLandmarkTimeRef = useRef(0);
+  const lastObjectTimeRef = useRef(0);
+  const lastIdentityTimeRef = useRef(0);
+  const rollingInferenceTimesRef = useRef([]);
+  const rVFCIdRef = useRef(null);
+
+  // Initialize computer vision models
+  const initModels = useCallback(async () => {
+    setIsModelsLoading(true);
+    setModelsError(null);
+    try {
+      await Promise.all([
+        initFaceLandmarker(),
+        initObjectDetector(),
+        initFaceIdentity()
+      ]);
+      setIsModelsLoading(false);
+    } catch (err) {
+      console.error('Fatal: Proctor vision models failed to load:', err);
+      setModelsError(err.message || 'Proctor vision models failed to load');
+      setIsModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isEnabled) {
+      initModels();
+    }
+  }, [isEnabled, initModels]);
+
   // Initialize Offscreen/Hidden Canvas for frame sampling & snapshot generation
   useEffect(() => {
     if (!canvasRef.current && typeof document !== 'undefined') {
@@ -123,6 +161,7 @@ export function useProctor({
       severity: points >= 10 ? 'WARNING' : 'INFO',
       durationMs,
       deduction: points,
+      source: metadata?.source || 'vision',
       timestamp: new Date().toISOString(),
       metadata: { ...metadata, reason }
     };
@@ -154,7 +193,11 @@ export function useProctor({
         severity: eventData.severity,
         confidence: eventData.confidence ?? 0.9,
         durationMs: eventData.durationMs || 0,
-        metadata: eventData.metadata || {},
+        source: eventData.source || 'vision',
+        metadata: {
+          ...(eventData.metadata || {}),
+          source: eventData.source || 'vision'
+        },
         snapshot,
         timestamp: eventData.timestamp || new Date().toISOString()
       };
@@ -316,25 +359,25 @@ export function useProctor({
     checkVirtualCameraDevices();
   }, [isEnabled, emitProctorEvent]);
 
-  // Frame sampling and Web Audio spectral processing loop (~500ms)
-  useEffect(() => {
-    if (!isRunning || !isEnabled) {
-      if (samplingIntervalRef.current) clearInterval(samplingIntervalRef.current);
-      return;
-    }
+  // -------------------------------------------------------------
+  // Real Computer Vision Sampling Loop: MediaPipe, COCO-SSD, Face-API
+  // Uses requestVideoFrameCallback (with fallback to setInterval)
+  // Landmarks: ~2-4 fps (~300ms) | Objects: ~0.5 fps (~2000ms) | Identity: ~0.2 fps (~5000ms)
+  // -------------------------------------------------------------
+  const isAnalyzingRef = useRef(false);
 
-    samplingIntervalRef.current = setInterval(() => {
+  const runVisionSampling = useCallback(
+    async (nowMs = performance.now()) => {
       const video = videoRef?.current;
       const worker = workerRef?.current;
-      const canvas = canvasRef?.current;
 
-      if (!video || !worker || !canvas || video.readyState < 2) return;
+      if (!video || !worker || video.readyState < 2 || isModelsLoading || modelsError) {
+        return;
+      }
+      if (isAnalyzingRef.current) return;
+      isAnalyzingRef.current = true;
 
       try {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
         // Track media stream status
         if (video.srcObject && video.srcObject !== activeStreamRef.current) {
           activeStreamRef.current = video.srcObject;
@@ -351,203 +394,226 @@ export function useProctor({
           });
         }
 
-        // -------------------------------------------------------------
-        // Web Audio API Spectral & Voice Formant Analysis
-        // -------------------------------------------------------------
-        let audioVolume = 0;
-        let speechDetected = false;
-        let twoSpeakerVariance = 0;
+        const isLowPerf = isLowPerformanceModeRef.current;
+        const landmarkInterval = isLowPerf ? 600 : 300; // ~1.6 fps (low-perf) or ~3.3 fps (normal)
+        const objectInterval = 2000; // ~0.5 fps
+        const identityInterval = 5000; // ~0.2 fps
 
-        if (analyserRef.current) {
-          const bufferLength = analyserRef.current.frequencyBinCount;
-          const dataArray = new Uint8Array(bufferLength);
-          analyserRef.current.getByteFrequencyData(dataArray);
+        // Only run when landmark interval has elapsed
+        if (nowMs - lastLandmarkTimeRef.current >= landmarkInterval) {
+          lastLandmarkTimeRef.current = nowMs;
+          const t0 = performance.now();
 
-          let sum = 0;
-          let weightedSum = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            sum += dataArray[i];
-            weightedSum += dataArray[i] * i;
+          // 1. Real MediaPipe Face Landmarks & Head Pose
+          let landmarkResult = null;
+          try {
+            landmarkResult = detectFaceLandmarks(video, nowMs);
+          } catch (e) {
+            // Frame detection error
           }
 
-          const avgVolume = sum / bufferLength;
-          audioVolume = Number((avgVolume / 128).toFixed(3)); // 0.0 to 2.0 ratio
+          if (landmarkResult) {
+            const hasFace = landmarkResult.faceCount > 0;
+            const isLookingAway = landmarkResult.isLookingAway;
 
-          speechDetected = audioVolume >= (proctorConfigs.thresholds.audio?.speechThresholdRatio || 0.16);
+            setLiveFaceInFrame(hasFace);
+            setLiveGaze(
+              landmarkResult.faceCount === 0
+                ? 'no_face'
+                : isLookingAway
+                ? 'looking_away'
+                : 'centered'
+            );
+            setLiveEyeFocus(
+              landmarkResult.faceCount === 0 ? 0 : isLookingAway ? 40 : 95
+            );
+            setFacePresenceStatus(
+              landmarkResult.faceCount === 0
+                ? 'face_missing'
+                : landmarkResult.faceCount > 1
+                ? 'multiple_faces'
+                : 'face_detected'
+            );
 
-          // Spectral centroid approximation for two-speaker formant heuristic
-          if (speechDetected && sum > 0) {
-            const centroid = weightedSum / sum;
-            spectralCentroidsRef.current.push(centroid);
-            if (spectralCentroidsRef.current.length > 8) {
-              spectralCentroidsRef.current.shift();
+            // Continuous face missing tracking
+            if (landmarkResult.faceCount === 0) {
+              if (!faceMissingStartTimeRef.current) {
+                faceMissingStartTimeRef.current = Date.now();
+              }
+              const missingDurationMs = Date.now() - faceMissingStartTimeRef.current;
+              if (missingDurationMs >= 3000) {
+                setIsFaceMissingLong(true);
+              }
+            } else {
+              faceMissingStartTimeRef.current = null;
+              setIsFaceMissingLong(false);
+              totalFacePresentMsRef.current += landmarkInterval;
             }
 
-            if (spectralCentroidsRef.current.length >= 4) {
-              const centroids = spectralCentroidsRef.current;
-              const meanCentroid = centroids.reduce((a, b) => a + b, 0) / centroids.length;
-              const variance =
-                centroids.reduce((acc, c) => acc + Math.pow(c - meanCentroid, 2), 0) /
-                centroids.length;
-              const normalizedVariance = variance / (meanCentroid || 1);
-              twoSpeakerVariance = Number(normalizedVariance.toFixed(3));
+            // 2. Real COCO-SSD Object Detection (~0.5 fps, skipped in low performance mode)
+            let prohibitedObjects = [];
+            if (!isLowPerf && nowMs - lastObjectTimeRef.current >= objectInterval) {
+              lastObjectTimeRef.current = nowMs;
+              try {
+                const objResult = await detectProhibitedObjects(video, 0.5);
+                prohibitedObjects = objResult.prohibitedDetections || [];
+              } catch (e) {
+                // Object detection error
+              }
             }
-          }
-        }
 
-        // Dynamic Computer Vision: Luminance & Skin Chromaticity Analysis
-        const data = imageData.data;
-        let totalBrightness = 0;
-        let skinPixelCount = 0;
-        let skinSumX = 0;
-        const totalSampled = Math.floor(data.length / 16);
+            // 3. Real Face-API Biometric Identity Verification (~0.2 fps)
+            let identityResult = null;
+            if (
+              referenceEmbedding &&
+              landmarkResult.faceCount === 1 &&
+              nowMs - lastIdentityTimeRef.current >= identityInterval
+            ) {
+              lastIdentityTimeRef.current = nowMs;
+              try {
+                identityResult = await verify(
+                  video,
+                  referenceEmbedding,
+                  proctorConfigs.thresholds?.identity?.maxEmbeddingDistance || 0.5
+                );
+              } catch (e) {
+                // Identity verification error
+              }
+            }
 
-        for (let i = 0; i < data.length; i += 16) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          totalBrightness += (0.299 * r + 0.587 * g + 0.114 * b);
+            // Measure inference latency & check for low performance mode (>400ms)
+            const inferenceTime = performance.now() - t0;
+            rollingInferenceTimesRef.current.push(inferenceTime);
+            if (rollingInferenceTimesRef.current.length > 5) {
+              rollingInferenceTimesRef.current.shift();
+            }
 
-          // Standard chromaticity heuristic for human skin tones
-          const isSkin = (
-            r > 45 && g > 30 && b > 20 &&
-            r > g && r > b &&
-            (r - g) > 10 &&
-            (r - b) > 10
-          );
+            const avgInference =
+              rollingInferenceTimesRef.current.reduce((a, b) => a + b, 0) /
+              rollingInferenceTimesRef.current.length;
 
-          if (isSkin) {
-            skinPixelCount++;
-            const pixelIndex = i / 4;
-            const x = pixelIndex % canvas.width;
-            skinSumX += x;
-          }
-        }
-
-        const avgLuminance = totalSampled > 0 ? totalBrightness / totalSampled : 128;
-        const skinRatio = totalSampled > 0 ? skinPixelCount / totalSampled : 0;
-        const centerX = skinPixelCount > 0 ? (skinSumX / skinPixelCount) / canvas.width : 0.5;
-
-        // Dynamic Presence & Gaze Telemetry Evaluation
-        let detectedFaces = [];
-        let currentGaze = 'centered';
-        let currentFocus = 95;
-        let inFrame = true;
-        let currentFacePresence = 'face_detected';
-
-        if (skinRatio < 0.035 || avgLuminance < 25) {
-          // Candidate moved away from camera / no face in frame
-          inFrame = false;
-          currentGaze = 'no_face';
-          currentFocus = 0;
-          currentFacePresence = 'face_missing';
-          detectedFaces = [];
-
-          if (!faceMissingStartTimeRef.current) {
-            faceMissingStartTimeRef.current = Date.now();
-          }
-          const missingDurationMs = Date.now() - faceMissingStartTimeRef.current;
-          if (missingDurationMs >= 3000) {
-            setIsFaceMissingLong(true);
-            const nowTime = Date.now();
-            if (nowTime - lastFaceWarningTimeRef.current >= 4000) {
-              lastFaceWarningTimeRef.current = nowTime;
+            if (avgInference > 400 && !isLowPerformanceModeRef.current) {
+              isLowPerformanceModeRef.current = true;
+              setIsLowPerformanceMode(true);
               setLatestWarning({
-                type: 'FACE_NOT_DETECTED',
-                severity: missingDurationMs >= 5000 ? 'orange' : 'yellow',
-                message: '⚠️ Face Missing: No face detected in camera stream for >3s. Please position yourself in front of the camera.',
+                type: 'LOW_PERFORMANCE_MODE',
+                severity: 'yellow',
+                message:
+                  '⚡ Low Performance Mode: Inference latency exceeded 400ms. Reduced frame rate and skipped object detection to preserve device stability.',
                 timestamp: new Date().toISOString()
               });
-              applyTrustDeduction('Face not detected (>3s)', 5, 'FACE_NOT_DETECTED', missingDurationMs, { durationMs: missingDurationMs });
-              emitProctorEvent({
-                type: 'FACE_NOT_DETECTED',
-                severity: 'yellow',
-                confidence: 0.95,
-                durationMs: missingDurationMs,
-                metadata: { durationMs: missingDurationMs, reason: 'Face absent > 3s' }
-              });
             }
-          }
-        } else {
-          // Face detected in camera frame
-          inFrame = true;
-          faceMissingStartTimeRef.current = null;
-          setIsFaceMissingLong(false);
-          currentFacePresence = 'face_detected';
-          totalFacePresentMsRef.current += 500; // Sample interval increment
-          if (centerX < 0.32 || centerX > 0.68) {
-            // Looking away / off-center
-            currentGaze = 'looking_away';
-            currentFocus = 42;
-            const yawOffset = centerX < 0.32 ? -0.22 : 0.22;
-            detectedFaces = [
-              {
-                box: { x: Math.round(centerX * canvas.width - 50), y: 40, width: 100, height: 100 },
-                landmarks: [
-                  { x: centerX + yawOffset, y: 0.5 }, // nose displaced
-                  { x: centerX - 0.12, y: 0.4 },
-                  { x: centerX + 0.12, y: 0.4 },
-                  { x: centerX, y: 0.65 },
-                  { x: centerX, y: 0.68 },
-                  { x: centerX - 0.08, y: 0.66 },
-                  { x: centerX + 0.08, y: 0.66 }
-                ]
+
+            // 4. Web Audio API Spectral & Voice Formant Analysis
+            let audioVolume = 0;
+            let speechDetected = false;
+            let twoSpeakerVariance = 0;
+
+            if (analyserRef.current) {
+              const bufferLength = analyserRef.current.frequencyBinCount;
+              const dataArray = new Uint8Array(bufferLength);
+              analyserRef.current.getByteFrequencyData(dataArray);
+
+              let sum = 0;
+              let weightedSum = 0;
+              for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+                weightedSum += dataArray[i] * i;
               }
-            ];
-          } else {
-            // Centered & focused on screen
-            currentGaze = 'centered';
-            currentFocus = Math.min(98, Math.max(90, Math.round(90 + skinRatio * 15)));
-            detectedFaces = [
-              {
-                box: { x: Math.round(canvas.width * 0.25), y: 40, width: 160, height: 160 },
-                landmarks: [
-                  { x: 0.5, y: 0.5 },
-                  { x: 0.35, y: 0.4 },
-                  { x: 0.65, y: 0.4 },
-                  { x: 0.5, y: 0.65 },
-                  { x: 0.5, y: 0.68 },
-                  { x: 0.42, y: 0.66 },
-                  { x: 0.58, y: 0.66 }
-                ]
+
+              const avgVolume = sum / bufferLength;
+              audioVolume = Number((avgVolume / 128).toFixed(3));
+              speechDetected =
+                audioVolume >= (proctorConfigs.thresholds.audio?.speechThresholdRatio || 0.16);
+
+              if (speechDetected && sum > 0) {
+                const centroid = weightedSum / sum;
+                spectralCentroidsRef.current.push(centroid);
+                if (spectralCentroidsRef.current.length > 8) {
+                  spectralCentroidsRef.current.shift();
+                }
+
+                if (spectralCentroidsRef.current.length >= 4) {
+                  const centroids = spectralCentroidsRef.current;
+                  const meanCentroid = centroids.reduce((a, b) => a + b, 0) / centroids.length;
+                  const variance =
+                    centroids.reduce((acc, c) => acc + Math.pow(c - meanCentroid, 2), 0) /
+                    centroids.length;
+                  const normalizedVariance = variance / (meanCentroid || 1);
+                  twoSpeakerVariance = Number(normalizedVariance.toFixed(3));
+                }
               }
-            ];
+            }
+
+            // Send real vision results to web worker for rules & escalation
+            worker.postMessage({
+              type: 'ANALYZE_PROCTOR_DATA',
+              payload: {
+                faceCount: landmarkResult.faceCount,
+                yaw: landmarkResult.yaw,
+                pitch: landmarkResult.pitch,
+                roll: landmarkResult.roll,
+                irisOffset: landmarkResult.irisOffset,
+                isLookingAway: landmarkResult.isLookingAway,
+                objects: prohibitedObjects,
+                identityResult,
+                audioMetrics: {
+                  volume: audioVolume,
+                  speechDetected,
+                  twoSpeakerVariance,
+                  isWriteMode
+                },
+                timestamp: Date.now()
+              }
+            });
           }
         }
-
-        setLiveFaceInFrame(inFrame);
-        setLiveGaze(currentGaze);
-        setLiveEyeFocus(currentFocus);
-        setFacePresenceStatus(currentFacePresence);
-
-        worker.postMessage({
-          type: 'ANALYZE_FRAME',
-          payload: {
-            pixels: imageData.data,
-            width: canvas.width,
-            height: canvas.height,
-            faces: detectedFaces,
-            objects: [],
-            currentEmbedding: referenceEmbedding,
-            referenceEmbedding,
-            audioMetrics: {
-              volume: audioVolume,
-              speechDetected,
-              twoSpeakerVariance,
-              isWriteMode
-            },
-            now: Date.now()
-          }
-        });
       } catch (err) {
-        // Frame capture skipped
+        // Frame analysis error
+      } finally {
+        isAnalyzingRef.current = false;
       }
-    }, proctorConfigs.samplingIntervalMs || 500);
+    },
+    [videoRef, isModelsLoading, modelsError, isWriteMode, referenceEmbedding, emitProctorEvent]
+  );
+
+  // Sampling driver using requestVideoFrameCallback (with fallback to setInterval)
+  useEffect(() => {
+    if (!isRunning || !isEnabled || isModelsLoading || modelsError) {
+      if (samplingIntervalRef.current) clearInterval(samplingIntervalRef.current);
+      return;
+    }
+
+    let isCancelled = false;
+    const video = videoRef?.current;
+
+    if (video && typeof video.requestVideoFrameCallback === 'function') {
+      const onFrame = (now) => {
+        if (isCancelled) return;
+        runVisionSampling(now);
+        if (videoRef?.current && typeof videoRef.current.requestVideoFrameCallback === 'function') {
+          rVFCIdRef.current = videoRef.current.requestVideoFrameCallback(onFrame);
+        }
+      };
+      rVFCIdRef.current = video.requestVideoFrameCallback(onFrame);
+    } else {
+      // Fallback to setInterval
+      samplingIntervalRef.current = setInterval(() => {
+        if (isCancelled) return;
+        runVisionSampling(performance.now());
+      }, 250);
+    }
 
     return () => {
-      if (samplingIntervalRef.current) clearInterval(samplingIntervalRef.current);
+      isCancelled = true;
+      if (video && rVFCIdRef.current && typeof video.cancelVideoFrameCallback === 'function') {
+        video.cancelVideoFrameCallback(rVFCIdRef.current);
+      }
+      if (samplingIntervalRef.current) {
+        clearInterval(samplingIntervalRef.current);
+      }
     };
-  }, [isRunning, isEnabled, isWriteMode, videoRef, referenceEmbedding, emitProctorEvent]);
+  }, [isRunning, isEnabled, isModelsLoading, modelsError, runVisionSampling, videoRef]);
 
   // ----------------------------------------------------------------
   // Browser-Behaviour Listeners (Tab switch, blur, fullscreen, devtools, right-click, resize)
@@ -1140,11 +1206,75 @@ export function useProctor({
     }
   }, []);
 
+  // Inject demo violation events carrying source: 'demo' (viva fallback)
+  const injectDemoEvent = useCallback((demoType) => {
+    const now = new Date().toISOString();
+    let demoEvent = null;
+
+    if (demoType === 'phone') {
+      demoEvent = {
+        type: 'PROHIBITED_OBJECT',
+        severity: 'red',
+        confidence: 0.99,
+        source: 'demo',
+        metadata: {
+          detectedObjects: [{ class: 'cell phone', score: 0.99 }],
+          source: 'demo',
+          isSimulated: true
+        },
+        timestamp: now
+      };
+    } else if (demoType === 'second_face') {
+      demoEvent = {
+        type: 'MULTIPLE_FACES',
+        severity: 'red',
+        confidence: 0.98,
+        source: 'demo',
+        metadata: {
+          faceCount: 2,
+          source: 'demo',
+          isSimulated: true
+        },
+        timestamp: now
+      };
+    } else if (demoType === 'identity_mismatch') {
+      demoEvent = {
+        type: 'IDENTITY_MISMATCH',
+        severity: 'red',
+        confidence: 0.96,
+        source: 'demo',
+        metadata: {
+          distance: 0.78,
+          threshold: 0.50,
+          source: 'demo',
+          isSimulated: true
+        },
+        timestamp: now
+      };
+    }
+
+    if (demoEvent) {
+      emitProctorEvent(demoEvent);
+      applyTrustDeduction(`[SIMULATED] ${demoEvent.type}`, 15, demoEvent.type, 0, demoEvent.metadata);
+      setLatestWarning({
+        type: demoEvent.type,
+        severity: demoEvent.severity,
+        message: `[SIMULATED] Test violation injected: ${demoEvent.type}`,
+        timestamp: now
+      });
+    }
+  }, [emitProctorEvent, applyTrustDeduction]);
+
   const totalDeductions = trustDeductions.reduce((sum, d) => sum + (d.points || 0), 0);
   const calculatedTrustScore = Math.max(0, Math.min(100, 100 - totalDeductions));
 
   return {
     isRunning,
+    isModelsLoading,
+    modelsError,
+    isLowPerformanceMode,
+    retryModels: initModels,
+    injectDemoEvent,
     latestWarning,
     warnings,
     dismissWarning,

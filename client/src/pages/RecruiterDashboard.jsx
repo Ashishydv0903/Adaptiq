@@ -744,6 +744,8 @@ export const RecruiterDashboard = () => {
           </div>
         </div>
       )}
+        </>
+      )}
 
       {/* Nodemailer Candidate Invitation Modal */}
       {showInviteModal && (
@@ -886,8 +888,6 @@ export const RecruiterDashboard = () => {
             )}
           </div>
         </div>
-      )}
-        </>
       )}
     </div>
   );

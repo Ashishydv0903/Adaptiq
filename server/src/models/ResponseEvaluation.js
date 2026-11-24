@@ -32,6 +32,15 @@ const responseEvaluationSchema = new mongoose.Schema(
       type: String,
       default: 'gemini-1.5-flash'
     },
+    isDemo: {
+      type: Boolean,
+      default: false
+    },
+    evaluatedBy: {
+      type: String,
+      enum: ['llm', 'heuristic'],
+      default: 'heuristic'
+    },
     variance: {
       type: Number,
       default: 0

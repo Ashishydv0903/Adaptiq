@@ -132,6 +132,7 @@ describe('Adaptive Interview Session APIs', () => {
     test('POST /api/sessions/:id/pause pauses session and returns remaining timer', async () => {
       const mockSession = {
         _id: 'session_123',
+        candidateId: mockUserId,
         status: 'in_progress',
         currentQuestionAllowedSeconds: 90,
         currentQuestionStartedAt: new Date(Date.now() - 30000), // 30s elapsed
@@ -139,7 +140,7 @@ describe('Adaptive Interview Session APIs', () => {
         save: jest.fn().mockResolvedValue(true)
       };
 
-      jest.spyOn(AssessmentSession, 'findById').mockResolvedValueOnce(mockSession);
+      jest.spyOn(AssessmentSession, 'findById').mockResolvedValue(mockSession);
 
       const res = await request(app)
         .post('/api/sessions/session_123/pause')

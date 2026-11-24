@@ -32,6 +32,7 @@ import {
 } from '../controllers/sessionController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import { sessionParamOwnership } from '../middleware/ownership.js';
 
 const router = express.Router();
 const audioUpload = multer({
@@ -53,7 +54,8 @@ const submitAnswerSchema = z.object({
   audioUrl: z.string().optional().default(''),
   editedAfterTranscription: z.boolean().optional().default(false),
   speechMetrics: z.record(z.any()).optional().nullable(),
-  spokenExplanation: z.record(z.any()).optional().nullable()
+  spokenExplanation: z.record(z.any()).optional().nullable(),
+  continueWithoutRunning: z.boolean().optional().default(false)
 });
 
 const evaluateResponseSchema = z.object({
@@ -122,6 +124,9 @@ const integrityEventSchema = z.object({
 
 // All session routes require authentication
 router.use(authenticate);
+
+// Enforce ownership: candidate can only access their own session, recruiter/admin can access any
+router.param('id', sessionParamOwnership);
 
 router.post('/start', validate(startSessionSchema), startSession);
 router.post('/start-targeted', startTargetedSession);

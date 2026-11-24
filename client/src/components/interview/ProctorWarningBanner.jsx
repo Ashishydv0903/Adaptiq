@@ -73,6 +73,8 @@ export const ProctorWarningBanner = ({
   return (
     <div
       role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
       className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-2xl rounded-2xl border ${config.border} ${config.bg} p-4 shadow-2xl backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-top-4`}
     >
       <div className="flex items-start gap-3.5">

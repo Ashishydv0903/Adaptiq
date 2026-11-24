@@ -43,18 +43,19 @@ const createAndSendTokens = async (user, statusCode, res, message = 'Success') =
  */
 export const register = async (req, res, next) => {
   try {
-    const { name, email, password, role, demographicGroup } = req.body;
+    const { name, email, password, demographicGroup } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return next(new AppError('An account with this email already exists', 409));
     }
 
+    // Public registration MUST ignore any role provided in the request body and always create a candidate
     const user = await User.create({
       name,
       email,
       password,
-      role: role || 'candidate',
+      role: 'candidate',
       demographicGroup: demographicGroup || 'unspecified'
     });
 

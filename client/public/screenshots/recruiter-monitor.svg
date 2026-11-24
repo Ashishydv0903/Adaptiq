@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B192C"/>
+      <stop offset="100%" stop-color="#07101B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="750" fill="url(#bg3)"/>
+
+  <!-- Recruiter Top Bar -->
+  <rect x="0" y="0" width="1200" height="60" fill="#07101B" stroke="#1B3A60" stroke-width="1"/>
+  <text x="35" y="37" fill="#FFFFFF" font-family="Outfit, Inter, sans-serif" font-weight="800" font-size="20">AdaptIQ Recruiter Command Center</text>
+  <rect x="990" y="16" width="170" height="30" rx="15" fill="#EF4444" opacity="0.15" stroke="#EF4444" stroke-width="1"/>
+  <circle cx="1010" cy="31" r="5" fill="#EF4444"/>
+  <text x="1025" y="36" fill="#EF4444" font-family="Inter, sans-serif" font-weight="700" font-size="12">1 Red Alert Active</text>
+
+  <!-- Left: Live Video Feeds Grid -->
+  <rect x="25" y="85" width="750" height="640" rx="18" fill="#0F2238" stroke="#1B3A60" stroke-width="1.5"/>
+  <text x="50" y="125" fill="#FFFFFF" font-family="Outfit, Inter, sans-serif" font-weight="700" font-size="18">Active Proctored Sessions (3 In Progress)</text>
+
+  <!-- Session 1: Clean -->
+  <rect x="50" y="150" width="330" height="230" rx="14" fill="#07101B" stroke="#52D68A" stroke-width="1.5"/>
+  <rect x="65" y="165" width="95" height="22" rx="11" fill="#52D68A" opacity="0.2"/>
+  <text x="75" y="180" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="11">● Alex Chen (98%)</text>
+  <circle cx="215" cy="250" r="40" fill="#1B3A60"/>
+  <text x="65" y="355" fill="#94A3B8" font-family="Inter, sans-serif" font-size="11">Senior Fullstack • Stage 3 Coding</text>
+
+  <!-- Session 2: Warning (Head pose yaw) -->
+  <rect x="410" y="150" width="330" height="230" rx="14" fill="#07101B" stroke="#F59E0B" stroke-width="1.5"/>
+  <rect x="425" y="165" width="115" height="22" rx="11" fill="#F59E0B" opacity="0.2"/>
+  <text x="435" y="180" fill="#F59E0B" font-family="Inter, sans-serif" font-weight="700" font-size="11">⚠️ Sarah Miller (82%)</text>
+  <circle cx="575" cy="250" r="40" fill="#1B3A60"/>
+  <text x="425" y="355" fill="#94A3B8" font-family="Inter, sans-serif" font-size="11">Gaze Deviation • 2 Warnings</text>
+
+  <!-- Session 3: Escalated Red Alert -->
+  <rect x="50" y="410" width="330" height="230" rx="14" fill="#07101B" stroke="#EF4444" stroke-width="2"/>
+  <rect x="65" y="425" width="135" height="22" rx="11" fill="#EF4444" opacity="0.2"/>
+  <text x="75" y="440" fill="#EF4444" font-family="Inter, sans-serif" font-weight="700" font-size="11">🚨 Jordan Lee (45% RED)</text>
+  <circle cx="215" cy="510" r="40" fill="#1B3A60"/>
+  <text x="65" y="615" fill="#EF4444" font-family="Inter, sans-serif" font-size="11 font-weight-bold">Cell Phone Detected • Auto-Paused</text>
+
+  <!-- Session 4: Waiting -->
+  <rect x="410" y="410" width="330" height="230" rx="14" fill="#07101B" stroke="#1B3A60" stroke-width="1"/>
+  <rect x="425" y="425" width="125" height="22" rx="11" fill="#1B3A60"/>
+  <text x="435" y="440" fill="#94A3B8" font-family="Inter, sans-serif" font-weight="700" font-size="11">● David Kim (Pending)</text>
+  <text x="425" y="525" fill="#64748B" font-family="Inter, sans-serif" font-size="13">Awaiting System Check</text>
+
+  <!-- Right: Real-Time Audit Log Feed -->
+  <rect x="800" y="85" width="375" height="640" rx="18" fill="#0F2238" stroke="#1B3A60" stroke-width="1.5"/>
+  <text x="825" y="125" fill="#FFFFFF" font-family="Outfit, Inter, sans-serif" font-weight="700" font-size="18">Append-Only Audit Stream</text>
+
+  <rect x="825" y="150" width="325" height="75" rx="12" fill="#07101B" stroke="#EF4444" stroke-width="1"/>
+  <text x="840" y="175" fill="#EF4444" font-family="Inter, sans-serif" font-weight="700" font-size="11">[12:04:12] RED INFRACTION ESCALATED</text>
+  <text x="840" y="195" fill="#E2E8F0" font-family="Inter, sans-serif" font-size="11">Jordan Lee: COCO-SSD detected cell phone</text>
+  <text x="840" y="212" fill="#94A3B8" font-family="Inter, sans-serif" font-size="10">Rolling 30s video buffer captured to evidence</text>
+
+  <rect x="825" y="240" width="325" height="65" rx="12" fill="#07101B" stroke="#F59E0B" stroke-width="1"/>
+  <text x="840" y="265" fill="#F59E0B" font-family="Inter, sans-serif" font-weight="700" font-size="11">[12:01:45] TAB BLUR DETECTED</text>
+  <text x="840" y="285" fill="#E2E8F0" font-family="Inter, sans-serif" font-size="11">Sarah Miller switched window focus (3.2s)</text>
+
+  <rect x="825" y="320" width="325" height="65" rx="12" fill="#07101B" stroke="#52D68A" stroke-width="1"/>
+  <text x="840" y="345" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="11">[11:58:10] BIOMETRIC VERIFIED</text>
+  <text x="840" y="365" fill="#E2E8F0" font-family="Inter, sans-serif" font-size="11">Alex Chen Euclidean distance 0.21 &lt; 0.50 threshold</text>
+</svg>

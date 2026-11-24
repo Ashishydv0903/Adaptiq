@@ -24,15 +24,36 @@ export const INTEGRITY_THRESHOLDS = {
 
 /**
  * Computes cosine similarity between two numeric embedding vectors.
+ * Enforces model consistency: vectors must originate from the same embedding model.
+ * If model metadata is mismatched or vector dimensions diverge, logs a warning and returns 0.
  *
  * Formula: (A . B) / (||A|| * ||B||)
  *
  * @param {number[]} vecA
  * @param {number[]} vecB
- * @returns {number} Cosine similarity in range [-1, 1], normalized to [0, 1]
+ * @param {Object} [metaA] - Optional metadata { model, dimension }
+ * @param {Object} [metaB] - Optional metadata { model, dimension }
+ * @returns {number} Cosine similarity in range [0, 1]
  */
-export function calculateCosineSimilarity(vecA, vecB) {
-  if (!vecA || !vecB || vecA.length === 0 || vecB.length === 0 || vecA.length !== vecB.length) {
+export function calculateCosineSimilarity(vecA, vecB, metaA = {}, metaB = {}) {
+  const modelA = metaA?.model || metaA?.embeddingModel || vecA?.model || vecA?.embeddingModel;
+  const modelB = metaB?.model || metaB?.embeddingModel || vecB?.model || vecB?.embeddingModel;
+
+  if (modelA && modelB && modelA !== modelB) {
+    console.warn(
+      `⚠️ [EMBEDDING MISMATCH] Attempted cosine similarity between incompatible models: "${modelA}" vs "${modelB}". Re-embedding required.`
+    );
+    return 0;
+  }
+
+  if (!vecA || !vecB || vecA.length === 0 || vecB.length === 0) {
+    return 0;
+  }
+
+  if (vecA.length !== vecB.length) {
+    console.warn(
+      `⚠️ [EMBEDDING DIMENSION MISMATCH] Vector dimension mismatch (${vecA.length} vs ${vecB.length}). Re-embedding required.`
+    );
     return 0;
   }
 

@@ -18,8 +18,11 @@ const startServer = async () => {
       logger.warn(`Database connection deferred: ${err.message}`);
     });
 
-    server.listen(env.PORT, () => {
+    server.listen(env.PORT, '0.0.0.0', () => {
       logger.info(`🚀 AdaptIQ Server running in ${env.NODE_ENV} mode on http://localhost:${env.PORT}`);
+      if (!env.GEMINI_API_KEY) {
+        logger.warn('⚠️ [AI CONFIGURATION] No GEMINI_API_KEY configured: AI scoring will use the heuristic scorer.');
+      }
     });
   } catch (error) {
     logger.error(`Failed to start server: ${error.message}`);

@@ -4,15 +4,21 @@
 
 @layer base {
   :root {
-    --background: 215 60% 11%;
-    --foreground: 210 40% 98%;
+    --background: #0B192C;
+    --foreground: #F8FAFC;
   }
 
   body {
     background-color: #0B192C;
     color: #F8FAFC;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     overflow-x: hidden;
+  }
+
+  /* High-visibility focus indicators for accessibility */
+  :focus-visible {
+    outline: 2px solid #52D68A;
+    outline-offset: 2px;
   }
 }
 
@@ -30,4 +36,17 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #52D68A;
+}
+
+/* Screen reader only utility class */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }

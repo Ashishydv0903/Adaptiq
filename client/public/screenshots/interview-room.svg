@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B192C"/>
+      <stop offset="100%" stop-color="#07101B"/>
+    </linearGradient>
+    <linearGradient id="panelGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0F2238"/>
+      <stop offset="100%" stop-color="#0B192C"/>
+    </linearGradient>
+    <linearGradient id="mintGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#52D68A"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Canvas Background -->
+  <rect width="1200" height="750" fill="url(#bgGrad)"/>
+
+  <!-- Top App Navigation Bar -->
+  <rect x="0" y="0" width="1200" height="60" fill="#07101B" stroke="#1B3A60" stroke-width="1"/>
+  <circle cx="35" cy="30" r="12" fill="#52D68A"/>
+  <text x="60" y="37" fill="#FFFFFF" font-family="Inter, sans-serif" font-weight="800" font-size="20">AdaptIQ</text>
+  <rect x="160" y="18" width="180" height="26" rx="13" fill="#1B3A60" opacity="0.6"/>
+  <text x="175" y="35" fill="#52D68A" font-family="Inter, sans-serif" font-weight="600" font-size="12">Stage 2 • Adaptive IRT</text>
+  
+  <rect x="980" y="16" width="190" height="30" rx="15" fill="#52D68A" opacity="0.15" stroke="#52D68A" stroke-width="1"/>
+  <circle cx="1000" cy="31" r="5" fill="#52D68A"/>
+  <text x="1015" y="36" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="12">Integrity: 98% (Secure)</text>
+
+  <!-- Left Column: Question Prompt & IRT Difficulty -->
+  <rect x="25" y="85" width="480" height="640" rx="18" fill="url(#panelGrad)" stroke="#1B3A60" stroke-width="1.5"/>
+  <rect x="50" y="110" width="110" height="24" rx="12" fill="#1B3A60"/>
+  <text x="65" y="126" fill="#86EFAC" font-family="Inter, sans-serif" font-weight="700" font-size="11">ALGORITHMS • 3PL</text>
+  <text x="50" y="170" fill="#FFFFFF" font-family="Outfit, Inter, sans-serif" font-weight="800" font-size="24">LRU Cache Architecture</text>
+  <text x="50" y="210" fill="#94A3B8" font-family="Inter, sans-serif" font-size="14" width="430">
+    Design a data structure that follows the constraints of a Least Recently Used (LRU) cache with O(1) get and put operations.
+  </text>
+
+  <!-- Webcam Face Mesh Preview -->
+  <rect x="50" y="440" width="430" height="255" rx="14" fill="#07101B" stroke="#52D68A" stroke-width="1.5"/>
+  <circle cx="265" cy="540" r="45" fill="#1B3A60" opacity="0.8"/>
+  <path d="M 235 640 C 235 590 295 590 295 640" fill="#1B3A60"/>
+  <!-- Iris & Landmarks overlay -->
+  <circle cx="250" cy="535" r="5" fill="#52D68A"/>
+  <circle cx="280" cy="535" r="5" fill="#52D68A"/>
+  <rect x="65" y="455" width="135" height="24" rx="12" fill="#0B192C" stroke="#52D68A" stroke-width="1"/>
+  <text x="78" y="471" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="11">● Focused (Yaw: 1.2°)</text>
+
+  <!-- Right Column: Monaco Code Editor & Real-Time Runner -->
+  <rect x="530" y="85" width="645" height="640" rx="18" fill="#07101B" stroke="#1B3A60" stroke-width="1.5"/>
+  <!-- Tab bar -->
+  <rect x="530" y="85" width="645" height="42" rx="18" fill="#0B192C"/>
+  <rect x="545" y="93" width="130" height="28" rx="8" fill="#07101B" stroke="#1B3A60" stroke-width="1"/>
+  <text x="560" y="112" fill="#52D68A" font-family="JetBrains Mono, monospace" font-size="12">solution.js</text>
+
+  <!-- Code lines -->
+  <text x="555" y="160" fill="#38BDF8" font-family="JetBrains Mono, monospace" font-size="14">class LRUCache {</text>
+  <text x="575" y="190" fill="#94A3B8" font-family="JetBrains Mono, monospace" font-size="14">constructor(capacity) {</text>
+  <text x="595" y="220" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">this.capacity = capacity;</text>
+  <text x="595" y="250" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">this.map = new Map();</text>
+  <text x="575" y="280" fill="#94A3B8" font-family="JetBrains Mono, monospace" font-size="14">}</text>
+  <text x="575" y="320" fill="#38BDF8" font-family="JetBrains Mono, monospace" font-size="14">get(key) {</text>
+  <text x="595" y="350" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">if (!this.map.has(key)) return -1;</text>
+  <text x="595" y="380" fill="#52D68A" font-family="JetBrains Mono, monospace" font-size="14">// Re-insert to refresh recency order</text>
+  <text x="595" y="410" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">const val = this.map.get(key);</text>
+  <text x="595" y="440" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">this.map.delete(key);</text>
+  <text x="595" y="470" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">this.map.set(key, val);</text>
+  <text x="595" y="500" fill="#F8FAFC" font-family="JetBrains Mono, monospace" font-size="14">return val;</text>
+  <text x="575" y="530" fill="#94A3B8" font-family="JetBrains Mono, monospace" font-size="14">}</text>
+  <text x="555" y="560" fill="#38BDF8" font-family="JetBrains Mono, monospace" font-size="14">}</text>
+
+  <!-- Output runner pane -->
+  <rect x="550" y="610" width="605" height="95" rx="12" fill="#0B192C" stroke="#1B3A60" stroke-width="1"/>
+  <text x="570" y="635" fill="#52D68A" font-family="Inter, sans-serif" font-weight="700" font-size="12">✓ 4 / 4 Test Cases Passed (Judge0 CE Sandbox)</text>
+  <text x="570" y="660" fill="#94A3B8" font-family="JetBrains Mono, monospace" font-size="11">Execution Time: 42ms • Memory: 14.2 MB • Status: 100% Correct</text>
+  <rect x="1030" y="640" width="110" height="34" rx="10" fill="#52D68A"/>
+  <text x="1055" y="662" fill="#07101B" font-family="Inter, sans-serif" font-weight="800" font-size="13">Submit</text>
+</svg>
